@@ -37,10 +37,10 @@ export default function TravelPanel({
   onRemoveTravelCity,
 }) {
   return (
-    <section className="app-panel rounded-2xl border p-6 space-y-6 animate-outfit-in">
+    <section className="app-panel rounded-2xl border-2 p-6 space-y-6 animate-outfit-in">
       <div>
-        <h2 className="text-xl font-bold">{tx.travelTitle}</h2>
-        <p className="text-xs text-muted mt-1">{tx.travelSubtitle}</p>
+        <h2 className="text-2xl font-extrabold">{tx.travelTitle}</h2>
+        <p className="text-sm font-medium text-muted mt-1">{tx.travelSubtitle}</p>
       </div>
 
       <form onSubmit={onAddTravelCity} className="grid grid-cols-1 md:grid-cols-6 gap-3">
@@ -55,13 +55,13 @@ export default function TravelPanel({
             value={travelCityInput}
             onChange={(e) => onTravelCityInputChange(e.target.value)}
             placeholder={tx.travelInputPlaceholder}
-            className={`w-full rounded-xl bg-surface-2 border-border text-text border px-3.5 py-2.5 text-xs ${FOCUS_RING}`}
+            className={`w-full rounded-xl bg-surface-2 border-border text-text border-2 px-3.5 py-2.5 text-sm font-medium ${FOCUS_RING}`}
           />
         </div>
         <div>
           <label
             htmlFor="travel-start-date-input"
-            className="block text-[11px] text-muted mb-1"
+            className="block text-xs font-bold text-text mb-1"
           >
             {tx.travelStartDateLabel}
           </label>
@@ -72,13 +72,13 @@ export default function TravelPanel({
             max={maxForecastIso}
             value={travelStartDateInput}
             onChange={(e) => onTravelStartDateInputChange(e.target.value)}
-            className={`w-full rounded-xl bg-surface-2 border-border text-text border px-3 py-2 text-xs ${FOCUS_RING}`}
+            className={`w-full rounded-xl bg-surface-2 border-border text-text border-2 px-3 py-2 text-sm font-medium ${FOCUS_RING}`}
           />
         </div>
         <div>
           <label
             htmlFor="travel-days-input"
-            className="block text-[11px] text-muted mb-1"
+            className="block text-xs font-bold text-text mb-1"
           >
             {tx.travelDaysLabel}
           </label>
@@ -89,14 +89,14 @@ export default function TravelPanel({
             max={14}
             value={travelDaysInput}
             onChange={(e) => onTravelDaysInputChange(e.target.value)}
-            className={`w-full rounded-xl bg-surface-2 border-border text-text border px-3.5 py-2 text-xs ${FOCUS_RING}`}
+            className={`w-full rounded-xl bg-surface-2 border-border text-text border-2 px-3.5 py-2 text-sm font-medium ${FOCUS_RING}`}
           />
         </div>
         <div className="md:col-span-2 flex items-end">
           <button
             type="submit"
             disabled={savingTravelCity}
-            className={`w-full min-h-[42px] rounded-xl bg-brand hover:bg-brand-strong text-brand-fg disabled:opacity-50 px-4 py-2.5 text-xs font-semibold transition cursor-pointer active:scale-95 ${FOCUS_RING}`}
+            className={`w-full min-h-[44px] rounded-xl bg-brand hover:bg-brand-strong text-brand-fg disabled:opacity-50 px-4 py-2.5 text-sm font-bold transition cursor-pointer active:scale-95 ${FOCUS_RING}`}
           >
             {savingTravelCity ? tx.searching : tx.travelSaveBtn}
           </button>
@@ -111,7 +111,7 @@ export default function TravelPanel({
             value={travelNoteInput}
             onChange={(e) => onTravelNoteInputChange(e.target.value)}
             placeholder={tx.travelNotePlaceholder}
-            className={`w-full rounded-xl bg-surface-2 border-border text-text border px-3.5 py-2.5 text-xs ${FOCUS_RING}`}
+            className={`w-full rounded-xl bg-surface-2 border-border text-text border-2 px-3.5 py-2.5 text-sm font-medium ${FOCUS_RING}`}
           />
         </div>
       </form>

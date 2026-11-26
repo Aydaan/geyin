@@ -5,11 +5,11 @@ const FOCUS_RING =
 
 export default function TopControls({ lang, onSelectLang, themeMode, onSelectTheme, tx }) {
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2.5">
       <div
         role="group"
         aria-label={tx.languageGroupLabel}
-        className="inline-flex items-center rounded-xl p-1 border text-xs bg-surface-muted border-border"
+        className="inline-flex items-center rounded-xl p-1 border-2 text-sm bg-surface-muted border-border"
       >
         {[
           { id: 'az', label: 'AZ' },
@@ -21,10 +21,10 @@ export default function TopControls({ lang, onSelectLang, themeMode, onSelectThe
             type="button"
             aria-pressed={lang === l.id}
             onClick={() => onSelectLang(l.id)}
-            className={`min-h-[32px] min-w-[36px] px-2.5 py-1 rounded-lg font-semibold transition cursor-pointer active:scale-95 ${FOCUS_RING} ${
+            className={`min-h-[34px] min-w-[40px] px-3 py-1 rounded-lg font-bold transition cursor-pointer active:scale-95 ${FOCUS_RING} ${
               lang === l.id
                 ? 'bg-brand text-brand-fg shadow-xs'
-                : 'text-muted hover:text-text'
+                : 'text-text/80 hover:text-text'
             }`}
           >
             {l.label}
@@ -35,7 +35,7 @@ export default function TopControls({ lang, onSelectLang, themeMode, onSelectThe
       <div
         role="group"
         aria-label={tx.themeGroupLabel}
-        className="inline-flex items-center rounded-xl p-1 border text-xs bg-surface-muted border-border"
+        className="inline-flex items-center rounded-xl p-1 border-2 text-sm bg-surface-muted border-border"
       >
         {[
           { id: 'auto', label: tx.auto },
@@ -47,10 +47,10 @@ export default function TopControls({ lang, onSelectLang, themeMode, onSelectThe
             type="button"
             aria-pressed={themeMode === m.id}
             onClick={() => onSelectTheme(m.id)}
-            className={`min-h-[32px] px-2.5 py-1 rounded-lg font-medium transition cursor-pointer active:scale-95 ${FOCUS_RING} ${
+            className={`min-h-[34px] px-3 py-1 rounded-lg font-bold transition cursor-pointer active:scale-95 ${FOCUS_RING} ${
               themeMode === m.id
                 ? 'bg-brand text-brand-fg shadow-xs'
-                : 'text-muted hover:text-text'
+                : 'text-text/80 hover:text-text'
             }`}
           >
             {m.label}

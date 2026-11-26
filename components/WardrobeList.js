@@ -23,7 +23,7 @@ export default function WardrobeList({
     <>
       <section className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-lg font-semibold">
+          <h2 className="text-xl font-bold">
             {tx.myItemsTitle} ({filteredItems.length})
           </h2>
           <div className="flex flex-wrap gap-2">
@@ -31,10 +31,10 @@ export default function WardrobeList({
               type="button"
               aria-pressed={selectedCategoryFilter === 'Hamısı'}
               onClick={() => onSelectCategoryFilter('Hamısı')}
-              className={`min-h-[36px] rounded-full px-3.5 py-1.5 text-xs font-medium transition cursor-pointer active:scale-95 ${FOCUS_RING} ${
+              className={`min-h-[38px] rounded-full px-4 py-1.5 text-sm font-bold transition cursor-pointer active:scale-95 ${FOCUS_RING} ${
                 selectedCategoryFilter === 'Hamısı'
                   ? 'bg-brand text-brand-fg'
-                  : 'bg-surface-solid text-muted hover:text-text border-border border'
+                  : 'bg-surface-solid text-muted hover:text-text border-border border-2'
               }`}
             >
               {tx.allFilter}
@@ -46,10 +46,10 @@ export default function WardrobeList({
                 key={cat.value}
                 aria-pressed={selectedCategoryFilter === cat.value}
                 onClick={() => onSelectCategoryFilter(cat.value)}
-                className={`min-h-[36px] rounded-full px-3.5 py-1.5 text-xs font-medium transition cursor-pointer active:scale-95 ${FOCUS_RING} ${
+                className={`min-h-[38px] rounded-full px-4 py-1.5 text-sm font-bold transition cursor-pointer active:scale-95 ${FOCUS_RING} ${
                   selectedCategoryFilter === cat.value
                     ? 'bg-brand text-brand-fg'
-                    : 'bg-surface-solid text-muted hover:text-text border-border border'
+                    : 'bg-surface-solid text-muted hover:text-text border-border border-2'
                 }`}
               >
                 {cat.label[lang] || cat.label.az}
@@ -59,9 +59,9 @@ export default function WardrobeList({
         </div>
 
         {loadingItems ? (
-          <p className="text-sm text-muted">{tx.loadingWardrobe}</p>
+          <p className="text-base font-medium text-muted">{tx.loadingWardrobe}</p>
         ) : filteredItems.length === 0 ? (
-          <div className="rounded-2xl bg-surface-solid border-border shadow-sm dark:shadow-none border p-8 text-center text-sm text-muted">
+          <div className="rounded-2xl bg-surface-solid border-border shadow-sm dark:shadow-none border-2 p-8 text-center text-base font-semibold text-muted">
             {tx.emptyCategoryMsg}
           </div>
         ) : (
@@ -69,7 +69,7 @@ export default function WardrobeList({
             {filteredItems.map((item) => (
               <div
                 key={item.id}
-                className="rounded-2xl bg-surface-solid border-border shadow-sm dark:shadow-none border overflow-hidden flex flex-col justify-between transition-all duration-200 hover:-translate-y-1"
+                className="rounded-2xl bg-surface-solid border-border shadow-sm dark:shadow-none border-2 overflow-hidden flex flex-col justify-between transition-all duration-200 hover:-translate-y-1"
               >
                 <div>
                   <div className="relative w-full h-44 bg-surface-muted">
@@ -83,38 +83,38 @@ export default function WardrobeList({
                     />
                   </div>
                   <div className="p-3.5 space-y-1.5">
-                    <p className="text-xs font-semibold">{getCategoryLabel(item.category, lang)}</p>
+                    <p className="text-sm font-bold">{getCategoryLabel(item.category, lang)}</p>
                     {item.sub_category && (
-                      <p className="text-xs text-muted">{item.sub_category}</p>
+                      <p className="text-sm font-medium text-muted">{item.sub_category}</p>
                     )}
                     <div className="flex flex-wrap gap-1.5 pt-1">
                       {item.color && (
-                        <span className="text-[11px] px-2 py-0.5 rounded-md bg-surface-2 border-border border text-muted">
+                        <span className="text-xs font-semibold px-2.5 py-0.5 rounded-md bg-surface-2 border-border border text-text">
                           {item.color}
                         </span>
                       )}
-                      <span className="text-[11px] px-2 py-0.5 rounded-md bg-surface-2 border-border border text-muted">
+                      <span className="text-xs font-semibold px-2.5 py-0.5 rounded-md bg-surface-2 border-border border text-text">
                         {tx.warmthShort}: {item.warmth_level}/5
                       </span>
                       {item.waterproof && (
-                        <span className="text-[11px] px-2 py-0.5 rounded-md font-medium bg-sky-100 text-sky-900 dark:bg-sky-500/15 dark:text-sky-300">
+                        <span className="text-xs px-2.5 py-0.5 rounded-md font-bold bg-sky-100 text-sky-950 border border-sky-300 dark:bg-sky-500/20 dark:text-sky-200 dark:border-sky-500/40">
                           {tx.waterproofBadge}
                         </span>
                       )}
                       {item.windproof && (
-                        <span className="text-[11px] px-2 py-0.5 rounded-md font-medium bg-teal-100 text-teal-900 dark:bg-teal-500/15 dark:text-teal-300">
+                        <span className="text-xs px-2.5 py-0.5 rounded-md font-bold bg-teal-100 text-teal-950 border border-teal-300 dark:bg-teal-500/20 dark:text-teal-200 dark:border-teal-500/40">
                           {tx.windproofBadge}
                         </span>
                       )}
                     </div>
                   </div>
                 </div>
-                <div className="px-3.5 pb-3">
+                <div className="px-3.5 pb-3.5">
                   <button
                     type="button"
                     disabled={deletingItemId === item.id}
                     onClick={() => onRequestDeleteItem(item)}
-                    className={`w-full min-h-[36px] rounded-lg bg-surface-2 border-border hover:bg-red-500/15 border hover:border-red-500/30 py-2 text-xs text-muted hover:text-red-600 dark:hover:text-red-400 transition cursor-pointer active:scale-95 disabled:opacity-50 ${FOCUS_RING}`}
+                    className={`w-full min-h-[38px] rounded-lg bg-surface-2 border-border hover:bg-red-500/15 border-2 hover:border-red-500/50 py-2 text-sm font-bold text-text hover:text-red-600 dark:hover:text-red-400 transition cursor-pointer active:scale-95 disabled:opacity-50 ${FOCUS_RING}`}
                   >
                     {tx.deleteBtn}
                   </button>
