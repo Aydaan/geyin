@@ -1,10 +1,10 @@
-'use client';
+﻿'use client';
 
 import Image from 'next/image';
 import { CATEGORIES, getCategoryLabel } from '@/lib/i18n';
 
 const FOCUS_RING =
-  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-700 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-emerald-300 dark:focus-visible:ring-offset-zinc-900';
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-strong focus-visible:ring-offset-2 focus-visible:ring-offset-surface-solid';
 
 export default function WardrobeList({
   tx,
@@ -33,8 +33,8 @@ export default function WardrobeList({
               onClick={() => onSelectCategoryFilter('Hamısı')}
               className={`min-h-[36px] rounded-full px-3.5 py-1.5 text-xs font-medium transition cursor-pointer active:scale-95 ${FOCUS_RING} ${
                 selectedCategoryFilter === 'Hamısı'
-                  ? 'bg-zinc-900 text-white dark:bg-white dark:text-zinc-950'
-                  : 'bg-white text-zinc-700 hover:text-zinc-900 border-stone-200 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:text-white dark:border-zinc-800 border'
+                  ? 'bg-brand text-brand-fg'
+                  : 'bg-surface-solid text-muted hover:text-text border-border border'
               }`}
             >
               {tx.allFilter}
@@ -48,8 +48,8 @@ export default function WardrobeList({
                 onClick={() => onSelectCategoryFilter(cat.value)}
                 className={`min-h-[36px] rounded-full px-3.5 py-1.5 text-xs font-medium transition cursor-pointer active:scale-95 ${FOCUS_RING} ${
                   selectedCategoryFilter === cat.value
-                    ? 'bg-zinc-900 text-white dark:bg-white dark:text-zinc-950'
-                    : 'bg-white text-zinc-700 hover:text-zinc-900 border-stone-200 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:text-white dark:border-zinc-800 border'
+                    ? 'bg-brand text-brand-fg'
+                    : 'bg-surface-solid text-muted hover:text-text border-border border'
                 }`}
               >
                 {cat.label[lang] || cat.label.az}
@@ -59,9 +59,9 @@ export default function WardrobeList({
         </div>
 
         {loadingItems ? (
-          <p className="text-sm text-zinc-600 dark:text-zinc-400">{tx.loadingWardrobe}</p>
+          <p className="text-sm text-muted">{tx.loadingWardrobe}</p>
         ) : filteredItems.length === 0 ? (
-          <div className="rounded-2xl bg-white border-stone-200 shadow-sm dark:bg-zinc-900 dark:border-zinc-800 dark:shadow-none border p-8 text-center text-sm text-zinc-600 dark:text-zinc-400">
+          <div className="rounded-2xl bg-surface-solid border-border shadow-sm dark:shadow-none border p-8 text-center text-sm text-muted">
             {tx.emptyCategoryMsg}
           </div>
         ) : (
@@ -69,10 +69,10 @@ export default function WardrobeList({
             {filteredItems.map((item) => (
               <div
                 key={item.id}
-                className="rounded-2xl bg-white border-stone-200 shadow-sm dark:bg-zinc-900 dark:border-zinc-800 dark:shadow-none border overflow-hidden flex flex-col justify-between transition-all duration-200 hover:-translate-y-1"
+                className="rounded-2xl bg-surface-solid border-border shadow-sm dark:shadow-none border overflow-hidden flex flex-col justify-between transition-all duration-200 hover:-translate-y-1"
               >
                 <div>
-                  <div className="relative w-full h-44">
+                  <div className="relative w-full h-44 bg-surface-muted">
                     <Image
                       src={item.image_url}
                       alt={item.sub_category || getCategoryLabel(item.category, lang)}
@@ -85,15 +85,15 @@ export default function WardrobeList({
                   <div className="p-3.5 space-y-1.5">
                     <p className="text-xs font-semibold">{getCategoryLabel(item.category, lang)}</p>
                     {item.sub_category && (
-                      <p className="text-xs text-zinc-700 dark:text-zinc-300">{item.sub_category}</p>
+                      <p className="text-xs text-muted">{item.sub_category}</p>
                     )}
                     <div className="flex flex-wrap gap-1.5 pt-1">
                       {item.color && (
-                        <span className="text-[11px] px-2 py-0.5 rounded-md bg-stone-50 border-stone-200 dark:bg-zinc-950 dark:border-zinc-800 border text-zinc-700 dark:text-zinc-300">
+                        <span className="text-[11px] px-2 py-0.5 rounded-md bg-surface-2 border-border border text-muted">
                           {item.color}
                         </span>
                       )}
-                      <span className="text-[11px] px-2 py-0.5 rounded-md bg-stone-50 border-stone-200 dark:bg-zinc-950 dark:border-zinc-800 border text-zinc-700 dark:text-zinc-300">
+                      <span className="text-[11px] px-2 py-0.5 rounded-md bg-surface-2 border-border border text-muted">
                         {tx.warmthShort}: {item.warmth_level}/5
                       </span>
                       {item.waterproof && (
@@ -114,7 +114,7 @@ export default function WardrobeList({
                     type="button"
                     disabled={deletingItemId === item.id}
                     onClick={() => onRequestDeleteItem(item)}
-                    className={`w-full min-h-[36px] rounded-lg bg-stone-50 border-stone-200 dark:bg-zinc-950 dark:border-zinc-800 hover:bg-red-500/15 border hover:border-red-500/30 py-2 text-xs text-zinc-600 dark:text-zinc-400 hover:text-red-500 transition cursor-pointer active:scale-95 disabled:opacity-50 ${FOCUS_RING}`}
+                    className={`w-full min-h-[36px] rounded-lg bg-surface-2 border-border hover:bg-red-500/15 border hover:border-red-500/30 py-2 text-xs text-muted hover:text-red-500 transition cursor-pointer active:scale-95 disabled:opacity-50 ${FOCUS_RING}`}
                   >
                     {tx.deleteBtn}
                   </button>
@@ -136,12 +136,12 @@ export default function WardrobeList({
           }}
         >
           <div
-            className="w-full max-w-sm rounded-2xl bg-white border-stone-200 shadow-xl dark:bg-zinc-900 dark:border-zinc-800 border p-5 space-y-4 animate-outfit-in"
+            className="w-full max-w-sm rounded-2xl bg-surface-solid border-border shadow-xl border p-5 space-y-4 animate-outfit-in"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center gap-3">
               {pendingDeleteItem.image_url && (
-                <div className="relative w-14 h-16 rounded-xl overflow-hidden border border-stone-200 dark:border-zinc-800 shrink-0">
+                <div className="relative w-14 h-16 rounded-xl overflow-hidden border border-border shrink-0">
                   <Image
                     src={pendingDeleteItem.image_url}
                     alt={
@@ -159,7 +159,7 @@ export default function WardrobeList({
                 <h3 id="delete-confirm-title" className="text-base font-semibold">
                   {tx.deleteConfirmTitle}
                 </h3>
-                <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-0.5">
+                <p className="text-xs text-muted mt-0.5">
                   {pendingDeleteItem.sub_category ||
                     getCategoryLabel(pendingDeleteItem.category, lang)}
                   {pendingDeleteItem.color ? ` • ${pendingDeleteItem.color}` : ''}
@@ -167,7 +167,7 @@ export default function WardrobeList({
               </div>
             </div>
 
-            <p className="text-xs text-zinc-700 dark:text-zinc-300 leading-relaxed">
+            <p className="text-xs text-muted leading-relaxed">
               {tx.deleteConfirmBody}
             </p>
 
@@ -176,7 +176,7 @@ export default function WardrobeList({
                 type="button"
                 disabled={!!deletingItemId}
                 onClick={onCancelDeleteItem}
-                className={`rounded-xl bg-stone-50 border-stone-200 dark:bg-zinc-950 dark:border-zinc-800 border px-4 py-2 text-xs font-medium transition cursor-pointer disabled:opacity-50 ${FOCUS_RING}`}
+                className={`rounded-xl bg-surface-2 border-border text-text border px-4 py-2 text-xs font-medium transition cursor-pointer disabled:opacity-50 ${FOCUS_RING}`}
               >
                 {tx.cancelBtn}
               </button>

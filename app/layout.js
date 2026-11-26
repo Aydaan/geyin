@@ -38,6 +38,8 @@ export const metadata = {
   },
 };
 
+const THEME_INIT_SCRIPT = `(function(){try{var m=localStorage.getItem('geyin_theme_mode');var d=m==='dark'||(m!=='light'&&window.matchMedia('(prefers-color-scheme: dark)').matches);var t=d?'dark':'light';document.documentElement.setAttribute('data-theme',t);document.documentElement.style.colorScheme=t;}catch(e){}})();`;
+
 export default function RootLayout({ children }) {
   return (
     <html
@@ -45,7 +47,10 @@ export default function RootLayout({ children }) {
       suppressHydrationWarning
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+      </head>
+      <body className="min-h-full flex flex-col bg-bg text-text">
         {children}
         <ServiceWorkerRegister />
       </body>
