@@ -466,13 +466,13 @@ export default function Home() {
         return;
       }
 
-      const results = await searchGeocodingCity(query, lang, { count: 1, signal: controller.signal });
+      const result = await searchGeocodingCity(query, lang, { signal: controller.signal });
       if (geoSearchAbortRef.current !== controller) return;
-      if (!results || results.length === 0) {
+      const top = Array.isArray(result) ? result[0] : result;
+      if (!top) {
         setError(tx.cityNotFound);
         return;
       }
-      const top = results[0];
       const opt = {
         value: top.name,
         label: `${top.name} (${top.country})`,
@@ -961,13 +961,13 @@ export default function Home() {
     setSavingTravelCity(true);
     setError('');
     try {
-      const results = await searchGeocodingCity(query, lang, { count: 1, signal: controller.signal });
+      const result = await searchGeocodingCity(query, lang, { signal: controller.signal });
       if (travelGeoAbortRef.current !== controller) return;
-      if (!results || results.length === 0) {
+      const top = Array.isArray(result) ? result[0] : result;
+      if (!top) {
         setError(tx.cityNotFound);
         return;
       }
-      const top = results[0];
       const plan = {
         id: `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
         name: top.name,
