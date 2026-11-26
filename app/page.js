@@ -169,6 +169,7 @@ export default function Home() {
   // Wardrobe Form state
   const [imageFile, setImageFile] = useState(null);
   const [imagePreviewUrl, setImagePreviewUrl] = useState('');
+  const [selectedTemplate, setSelectedTemplate] = useState(null);
   const [category, setCategory] = useState(CATEGORIES[0].value);
   const [subCategory, setSubCategory] = useState('');
   const [color, setColor] = useState('');
@@ -691,32 +692,63 @@ export default function Home() {
     }
   };
 
+  const handleImageFileChange = (file) => {
+    setImageFile(file);
+    if (file) {
+      setSelectedTemplate(null);
+    }
+  };
+
+  const handleSelectTemplate = (tpl) => {
+    if (selectedTemplate?.id === tpl.id) {
+      setSelectedTemplate(null);
+      return;
+    }
+    setSelectedTemplate(tpl);
+    setImageFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    setCategory(tpl.category);
+    setSubCategory(tpl.label[lang] || tpl.label.az);
+    setStyle(tpl.style);
+    setWarmthLevel(tpl.warmth);
+    setWaterproof(Boolean(tpl.waterproof));
+    setWindproof(Boolean(tpl.windproof));
+  };
+
   // Add Item
   const handleAddItem = async (e) => {
     e.preventDefault();
     if (!user) return;
-    if (!imageFile) {
+    if (!imageFile && !selectedTemplate) {
       setError(tx.photoRequired);
       return;
     }
 
-    const validation = await validateImageFile(imageFile);
-    if (!validation.valid) {
-      if (validation.error === 'photoTooLarge') setError(tx.photoTooLarge);
-      else if (validation.error === 'photoInvalidType') setError(tx.photoInvalidType);
-      else setError(tx.photoRequired);
-      return;
+    let validation = null;
+    if (imageFile) {
+      validation = await validateImageFile(imageFile);
+      if (!validation.valid) {
+        if (validation.error === 'photoTooLarge') setError(tx.photoTooLarge);
+        else if (validation.error === 'photoInvalidType') setError(tx.photoInvalidType);
+        else setError(tx.photoRequired);
+        return;
+      }
     }
 
     setUploading(true);
     setError('');
     setMessage('');
     try {
-      const storagePath = generateSafeStoragePath(user.id, validation.ext);
-      const { error: uploadErr } = await supabase.storage
-        .from(CLOTHES_BUCKET)
-        .upload(storagePath, imageFile, { contentType: imageFile.type });
-      if (uploadErr) throw uploadErr;
+      let storagePath;
+      if (imageFile && validation) {
+        storagePath = generateSafeStoragePath(user.id, validation.ext);
+        const { error: uploadErr } = await supabase.storage
+          .from(CLOTHES_BUCKET)
+          .upload(storagePath, imageFile, { contentType: imageFile.type });
+        if (uploadErr) throw uploadErr;
+      } else {
+        storagePath = selectedTemplate.imageUrl;
+      }
 
       const { data: inserted, error: insertErr } = await supabase
         .from('wardrobe_items')
@@ -739,6 +771,7 @@ export default function Home() {
       const resolved = await resolveWardrobeItemUrls(supabase, [inserted]);
       setItems((prev) => [resolved[0], ...prev]);
       setImageFile(null);
+      setSelectedTemplate(null);
       setSubCategory('');
       setColor('');
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -1135,6 +1168,7 @@ export default function Home() {
               lang={lang}
               imageFile={imageFile}
               imagePreviewUrl={imagePreviewUrl}
+              selectedTemplate={selectedTemplate}
               category={category}
               subCategory={subCategory}
               color={color}
@@ -1144,7 +1178,8 @@ export default function Home() {
               windproof={windproof}
               uploading={uploading}
               fileInputRef={fileInputRef}
-              onImageFileChange={setImageFile}
+              onImageFileChange={handleImageFileChange}
+              onSelectTemplate={handleSelectTemplate}
               onCategoryChange={setCategory}
               onSubCategoryChange={setSubCategory}
               onColorChange={setColor}
