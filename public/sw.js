@@ -51,10 +51,22 @@ self.addEventListener('fetch', (event) => {
           }
           return response;
         })
-        .catch(() => caches.match(request).then((cached) => cached || caches.match('/')))
+        .catch(() =>
+          caches
+            .match(request)
+            .then((cached) => cached || caches.match('/'))
+            .then((res) => res || Response.error())
+        )
     );
     return;
   }
+
+  const isStaticAsset =
+    url.pathname.startsWith('/_next/static/') ||
+    url.pathname.startsWith('/icons/') ||
+    url.pathname === '/manifest.json';
+
+  if (!isStaticAsset) return;
 
   // Cache-first with background refresh for static same-origin assets
   event.respondWith(
@@ -67,7 +79,7 @@ self.addEventListener('fetch', (event) => {
           }
           return response;
         })
-        .catch(() => cached);
+        .catch(() => cached || Response.error());
 
       return cached || networkFetch;
     })
