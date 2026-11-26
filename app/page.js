@@ -30,6 +30,17 @@ import {
   resolveWardrobeItemUrls,
   validateImageFile,
 } from '@/lib/storage';
+import {
+  getSavedOutfitsKey,
+  getTravelCitiesKey,
+  getManualLocationKey,
+  migrateLegacyUserKeys,
+  readJson,
+  collectSavedOutfitImages,
+  applyImageUrls,
+  pickInitialTravelPlan,
+  isValidManualLocation,
+} from '@/lib/user-storage';
 
 import TopControls from '@/components/TopControls';
 import AuthForm from '@/components/AuthForm';
@@ -246,10 +257,6 @@ export default function Home() {
     return () => clearTimeout(timer);
   }, [message]);
 
-  const getSavedOutfitsKey = useCallback((uId) => `geyin_saved_${uId || 'guest'}`, []);
-  const getTravelCitiesKey = useCallback((uId) => `geyin_travel_${uId || 'guest'}`, []);
-  const getManualLocationKey = useCallback((uId) => `geyin_manual_${uId || 'guest'}`, []);
-
   // Auth state listener
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -403,13 +410,29 @@ export default function Home() {
     if (!matched) return;
     const label = matched.nameByLang ? matched.nameByLang[lang] || matched.name : matched.name;
     fetchWeatherForCoords(matched.lat, matched.lon, label, 'manual');
+    saveManualLocation({ name: matched.name, lat: matched.lat, lon: matched.lon, label, mode: 'manual' });
+  };
+
+  // Persist a manually chosen location so it wins over GPS on the next login.
+  const saveManualLocation = (entry) => {
+    if (!user) return;
+    try {
+      localStorage.setItem(getManualLocationKey(user.id), JSON.stringify(entry));
+    } catch {
+      // ignore
+    }
+  };
+
+  // GPS button: forget the manual choice, then locate.
+  const handleDetectGps = () => {
     if (user) {
       try {
-        localStorage.setItem(getManualLocationKey(user.id), JSON.stringify(matched));
+        localStorage.removeItem(getManualLocationKey(user.id));
       } catch {
         // ignore
       }
     }
+    detectGpsLocation();
   };
 
   const handleWorldCitySearch = async (e) => {
@@ -433,6 +456,13 @@ export default function Home() {
         });
         setSelectedCity(localMatch.name);
         fetchWeatherForCoords(localMatch.lat, localMatch.lon, localMatch.name, 'search', query);
+        saveManualLocation({
+          name: localMatch.name,
+          lat: localMatch.lat,
+          lon: localMatch.lon,
+          label: localMatch.name,
+          mode: 'search',
+        });
         setCitySearchQuery('');
         return;
       }
@@ -458,6 +488,13 @@ export default function Home() {
       setCustomCityOption(opt);
       setSelectedCity(top.name);
       fetchWeatherForCoords(top.latitude, top.longitude, top.name, 'search', query);
+      saveManualLocation({
+        name: top.name,
+        lat: top.latitude,
+        lon: top.longitude,
+        label: top.name,
+        mode: 'search',
+      });
       setCitySearchQuery('');
     } catch (err) {
       if (isAbortError(err) || geoSearchAbortRef.current !== controller) return;
@@ -523,11 +560,42 @@ export default function Home() {
     [demoPresetId, liveRawWeather, selectedCity, lang]
   );
 
-  // Initial location load
+  // Initial location load: saved manual/search location wins over GPS.
+  // Refs keep this from re-running when language (and so these callbacks) change.
+  const detectGpsRef = useRef(detectGpsLocation);
+  const fetchWeatherRef = useRef(fetchWeatherForCoords);
+  useEffect(() => {
+    detectGpsRef.current = detectGpsLocation;
+    fetchWeatherRef.current = fetchWeatherForCoords;
+  });
+
+  const userId = user?.id ?? null;
+
   useEffect(() => {
     if (!authChecked) return;
-    queueMicrotask(() => detectGpsLocation());
-  }, [authChecked, detectGpsLocation]);
+    let saved = null;
+    if (userId) {
+      migrateLegacyUserKeys(localStorage, userId);
+      saved = readJson(localStorage, getManualLocationKey(userId), null);
+    }
+    queueMicrotask(() => {
+      if (!isValidManualLocation(saved)) {
+        detectGpsRef.current();
+        return;
+      }
+      const name = saved.name || saved.city || saved.label || '';
+      const label = saved.label || name;
+      if (name && !WORLD_CITIES.some((c) => c.name === name)) {
+        setCustomCityOption({
+          value: name,
+          label,
+          city: { name, code: '', lat: saved.lat, lon: saved.lon, nameByLang: {} },
+        });
+      }
+      if (name) setSelectedCity(name);
+      fetchWeatherRef.current(saved.lat, saved.lon, label, saved.mode === 'search' ? 'search' : 'manual');
+    });
+  }, [authChecked, userId]);
 
   // Load wardrobe items
   const loadWardrobeItems = useCallback(async () => {
@@ -564,27 +632,54 @@ export default function Home() {
     return () => clearInterval(interval);
   }, [user, items]);
 
+  // Re-sign saved outfit photos by storage path (stored URLs expire after 1h).
+  const refreshSavedOutfitImages = useCallback(async (list) => {
+    const pieces = collectSavedOutfitImages(list);
+    if (pieces.length === 0) return list;
+    const resolved = await resolveWardrobeItemUrls(supabase, pieces);
+    const urlByPath = new Map(
+      resolved.filter((p) => p?.image_path && p?.image_url).map((p) => [p.image_path, p.image_url])
+    );
+    return applyImageUrls(list, urlByPath);
+  }, []);
+
   // Load user saved outfits & travel cities
   useEffect(() => {
-    if (!user) return;
-    try {
-      const savedOutfitsRaw = localStorage.getItem(getSavedOutfitsKey(user.id));
-      if (savedOutfitsRaw) {
-        const parsed = JSON.parse(savedOutfitsRaw);
-        const pieces = parsed.flatMap((s) => s.pieces || []);
-        resolveWardrobeItemUrls(supabase, pieces).then(() => {
-          queueMicrotask(() => setSavedOutfits(parsed));
-        });
-      }
-      const savedTravelRaw = localStorage.getItem(getTravelCitiesKey(user.id));
-      if (savedTravelRaw) {
-        const parsed = JSON.parse(savedTravelRaw);
-        queueMicrotask(() => setTravelCities(parsed));
-      }
-    } catch {
-      // ignore
+    if (!userId) return;
+    let cancelled = false;
+    migrateLegacyUserKeys(localStorage, userId);
+
+    const savedRaw = readJson(localStorage, getSavedOutfitsKey(userId), []);
+    const savedList = Array.isArray(savedRaw) ? savedRaw : [];
+    const travelRaw = readJson(localStorage, getTravelCitiesKey(userId), []);
+    const travelList = Array.isArray(travelRaw) ? travelRaw : [];
+
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setSavedOutfits(savedList);
+      setTravelCities(travelList);
+      setActiveTravelPlan(pickInitialTravelPlan(travelList));
+    });
+
+    if (savedList.length > 0) {
+      refreshSavedOutfitImages(savedList).then((fresh) => {
+        if (!cancelled) setSavedOutfits(fresh);
+      });
     }
-  }, [user, getSavedOutfitsKey, getTravelCitiesKey]);
+    return () => {
+      cancelled = true;
+    };
+  }, [userId, refreshSavedOutfitImages]);
+
+  // Keep saved outfit photos signed while the page stays open.
+  useEffect(() => {
+    if (!userId || savedOutfits.length === 0) return;
+    const interval = setInterval(async () => {
+      const fresh = await refreshSavedOutfitImages(savedOutfits);
+      setSavedOutfits(fresh);
+    }, (SIGNED_URL_TTL_SECONDS - 60) * 1000);
+    return () => clearInterval(interval);
+  }, [userId, savedOutfits, refreshSavedOutfitImages]);
 
   // Generate outfit when weather or style changes
   useEffect(() => {
@@ -1070,7 +1165,7 @@ export default function Home() {
                 customCityOption={customCityOption}
                 citySearchQuery={citySearchQuery}
                 searchingCity={searchingCity}
-                onDetectGpsLocation={detectGpsLocation}
+                onDetectGpsLocation={handleDetectGps}
                 onCitySelect={handleCitySelect}
                 onCitySearchQueryChange={setCitySearchQuery}
                 onWorldCitySearch={handleWorldCitySearch}
