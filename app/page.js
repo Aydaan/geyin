@@ -1048,12 +1048,12 @@ export default function Home() {
     <div className="min-h-screen bg-bg text-text transition-colors duration-200">
       <div className="mx-auto max-w-6xl px-4 sm:px-6 py-8 space-y-8">
         {/* Header with App Title, Language/Theme Toggles, and Logout */}
-        <header className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-border">
+        <header className="flex flex-wrap items-center justify-between gap-4 pb-5 border-b-2 border-border">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight text-brand-strong">
+            <h1 className="text-3xl font-extrabold tracking-tight text-brand-strong">
               Geyin
             </h1>
-            <p className="text-xs text-muted mt-0.5">{user.email}</p>
+            <p className="text-sm font-medium text-muted mt-0.5">{user.email}</p>
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
@@ -1068,7 +1068,7 @@ export default function Home() {
             <button
               type="button"
               onClick={handleLogout}
-              className="min-h-[36px] rounded-xl bg-surface-solid border-border text-text shadow-sm dark:shadow-none hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40 dark:hover:text-red-400 border px-3.5 py-1.5 text-xs font-medium transition cursor-pointer active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+              className="min-h-[40px] rounded-xl bg-surface-solid border-border text-text shadow-sm dark:shadow-none hover:bg-red-50 hover:text-red-700 hover:border-red-400 dark:hover:bg-red-950/40 dark:hover:text-red-300 border-2 px-4 py-2 text-sm font-bold transition cursor-pointer active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
             >
               {tx.logout}
             </button>
@@ -1079,13 +1079,13 @@ export default function Home() {
         {error && (
           <div
             role="alert"
-            className="flex items-center justify-between rounded-xl border border-red-200 bg-red-50 p-4 text-xs font-medium text-red-800 dark:border-red-900/40 dark:bg-red-950/40 dark:text-red-300 animate-outfit-in"
+            className="flex items-center justify-between rounded-xl border-2 border-red-400 bg-red-50 p-4 text-sm font-semibold text-red-900 dark:border-red-500/50 dark:bg-red-950/40 dark:text-red-200 animate-outfit-in"
           >
             <span>{error}</span>
             <button
               type="button"
               onClick={() => setError('')}
-              className="text-xs font-bold text-red-700 dark:text-red-400 hover:underline cursor-pointer ml-3"
+              className="text-sm font-bold text-red-800 dark:text-red-300 hover:underline cursor-pointer ml-3"
             >
               ✕
             </button>
@@ -1095,13 +1095,13 @@ export default function Home() {
         {message && (
           <div
             role="status"
-            className="flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-xs font-medium text-emerald-800 dark:border-emerald-900/40 dark:bg-emerald-950/40 dark:text-emerald-300 animate-outfit-in"
+            className="flex items-center justify-between rounded-xl border-2 border-emerald-400 bg-emerald-50 p-4 text-sm font-semibold text-emerald-900 dark:border-emerald-500/50 dark:bg-emerald-950/40 dark:text-emerald-200 animate-outfit-in"
           >
             <span>{message}</span>
             <button
               type="button"
               onClick={() => setMessage('')}
-              className="text-xs font-bold text-emerald-700 dark:text-emerald-400 hover:underline cursor-pointer ml-3"
+              className="text-sm font-bold text-emerald-800 dark:text-emerald-300 hover:underline cursor-pointer ml-3"
             >
               ✕
             </button>
@@ -1112,7 +1112,7 @@ export default function Home() {
         <nav
           role="tablist"
           aria-label="App Navigation"
-          className="flex space-x-2 border-b border-border pb-2"
+          className="flex space-x-2 border-b-2 border-border pb-3"
         >
           <button
             type="button"
@@ -1121,10 +1121,10 @@ export default function Home() {
             aria-selected={activeTab === 'today'}
             aria-controls="panel-today"
             onClick={() => setActiveTab('today')}
-            className={`min-h-[40px] px-4 py-2 text-xs font-semibold rounded-xl transition cursor-pointer active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-strong ${
+            className={`min-h-[42px] px-5 py-2.5 text-sm font-bold rounded-xl transition cursor-pointer active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-strong ${
               activeTab === 'today'
                 ? 'bg-brand text-brand-fg shadow-sm'
-                : 'text-muted hover:text-text hover:bg-surface-muted/60'
+                : 'text-muted hover:text-text hover:bg-surface-muted/60 border-2 border-transparent hover:border-border'
             }`}
           >
             {tx.tabToday}
@@ -1136,10 +1136,10 @@ export default function Home() {
             aria-selected={activeTab === 'travel'}
             aria-controls="panel-travel"
             onClick={() => setActiveTab('travel')}
-            className={`min-h-[40px] px-4 py-2 text-xs font-semibold rounded-xl transition cursor-pointer active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-strong ${
+            className={`min-h-[42px] px-5 py-2.5 text-sm font-bold rounded-xl transition cursor-pointer active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-strong ${
               activeTab === 'travel'
                 ? 'bg-brand text-brand-fg shadow-sm'
-                : 'text-muted hover:text-text hover:bg-surface-muted/60'
+                : 'text-muted hover:text-text hover:bg-surface-muted/60 border-2 border-transparent hover:border-border'
             }`}
           >
             {tx.tabTravel}
