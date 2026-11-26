@@ -9,6 +9,10 @@ import {
   isAbortError,
 } from '@/lib/weather';
 
+const getSavedOutfitsKey = (userId) => `geyin_saved_${userId}`;
+const getTravelCitiesKey = (userId) => `geyin_travel_cities_${userId}`;
+const getManualLocationKey = (userId) => `geyin_manual_location_${userId}`;
+
 const CATEGORIES = [
   {
     value: 'Üst geyim',
@@ -166,20 +170,24 @@ const UI_TEXT = {
     saveOutfit: 'Yadda saxla',
     savedToast: 'Kombin "Sevimli kombinlərim" bölməsinə əlavə olundu!',
     loadedToast: 'Sevimli kombin əsas sahəyə yükləndi.',
-    travelTitle: 'Səyahət və 1 həftəlik valiz tövsiyəsi',
+    travelTitle: 'Səyahət və valiz tövsiyəsi',
     travelSubtitle:
-      'Gedəcəyin şəhəri və neçə günlük səyahət etdiyini yaz — 1 həftəlik hava proqnozuna əsasən valizə qoyulacaq paltarları seçək.',
+      'Gedəcəyin şəhəri, başlama tarixini və neçə günlük (1–14 gün) səyahət etdiyini seç — 16 günlük hava proqnozuna əsasən valizə qoyulacaq paltarları seçək.',
     travelInputPlaceholder: 'Gedəcəyin şəhəri yaz (məs: London, Dubai, Rome)...',
-    travelDaysLabel: 'Səyahət müddəti (gün)',
+    travelStartDateLabel: 'Başlama tarixi',
+    travelDaysLabel: 'Səyahət müddəti (1–14 gün)',
     travelNotePlaceholder: 'Əlavə qeyd (məs: iş səfəri, gəzinti)',
     travelSaveBtn: 'Şəhəri qeyd et və valizi hazırla',
     travelSavedListTitle: 'Qeyd etdiyin səyahət şəhərləri',
     useCityBtn: 'Bu şəhəri seç',
     removeCityBtn: 'Çıxar',
     travelEmptyMsg: 'Hələ səyahət şəhəri qeyd etməmisən. Yuxarıdan gedəcəyin şəhəri əlavə et.',
-    weeklyForecastTitle: '1 həftəlik (7 günlük) hava proqnozu',
+    weeklyForecastTitle: 'Səyahət hava proqnozu',
+    forecastDaysIncluded: 'Nəzərə alınan günlər',
+    forecastPartialNote: 'Qeyd: Open-Meteo maksimum 16 günlük proqnoz təqdim edir; əhatə olunmayan sonrakı günlər proqnoza daxil deyil.',
+    forecastOutOfRange: 'Seçilmiş tarixlər 16 günlük proqnoz pəncərəsindən kənarda qalır.',
     suitcaseTitle: 'Valizə qoyulacaq geyimlər (Qarderobundan)',
-    suitcaseSummary: 'günlük səyahət • 7 günlük proqnoza uyğun seçildi',
+    suitcaseSummary: 'günlük səyahət • proqnoz əsasında seçildi',
     rainyWeekNote: 'Həftə ərzində yağış ehtimalı yüksəkdir — suya davamlı geyimlərə üstünlük verildi.',
     coldWeekNote: 'Həftə ərzində sərin/soyuq günlər var — üst örtük və isti parçalar əlavə olundu.',
     warmWeekNote: 'Həftə ərzində mülayim/isti hava gözlənilir — yüngül və nəfəs alan parçalar seçildi.',
@@ -288,20 +296,24 @@ const UI_TEXT = {
     saveOutfit: 'Save outfit',
     savedToast: 'Outfit added to Saved Outfits!',
     loadedToast: 'Saved outfit loaded into main view.',
-    travelTitle: 'Travel & 1-Week Suitcase Guide',
+    travelTitle: 'Travel & Suitcase Guide',
     travelSubtitle:
-      'Enter your destination city and how many days you are traveling — we pick suitcase items from your wardrobe based on the 7-day forecast.',
+      'Enter your destination city, start date, and trip length (1–14 days) — we pick suitcase items from your wardrobe using up to 16 days of forecast.',
     travelInputPlaceholder: 'Enter destination city (e.g. London, Dubai, Rome)...',
-    travelDaysLabel: 'Trip length (days)',
+    travelStartDateLabel: 'Start date',
+    travelDaysLabel: 'Trip length (1–14 days)',
     travelNotePlaceholder: 'Note (e.g. work trip, sightseeing)',
     travelSaveBtn: 'Save city & build suitcase',
     travelSavedListTitle: 'Saved travel cities',
     useCityBtn: 'Use city',
     removeCityBtn: 'Remove',
     travelEmptyMsg: 'No travel cities saved yet. Add a destination city above.',
-    weeklyForecastTitle: '1-Week (7-Day) Forecast',
+    weeklyForecastTitle: 'Trip Weather Forecast',
+    forecastDaysIncluded: 'Forecast days included',
+    forecastPartialNote: 'Note: Open-Meteo provides forecasts up to 16 days ahead; days beyond that window are not covered.',
+    forecastOutOfRange: 'Selected dates are outside the 16-day forecast window.',
     suitcaseTitle: 'Suggested Suitcase Items (From Your Wardrobe)',
-    suitcaseSummary: 'day trip • tailored to 7-day forecast',
+    suitcaseSummary: 'day trip • tailored to trip forecast',
     rainyWeekNote: 'High chance of rain during the week — waterproof items were prioritized.',
     coldWeekNote: 'Cool/cold days expected — outerwear and warmer pieces were included.',
     warmWeekNote: 'Mild/warm days expected — lighter and breathable pieces were prioritized.',
@@ -409,20 +421,24 @@ const UI_TEXT = {
     saveOutfit: 'Сохранить',
     savedToast: 'Образ добавлен в «Избранные образы»!',
     loadedToast: 'Сохраненный образ загружен.',
-    travelTitle: 'Поездка и сбор чемодана на неделю',
+    travelTitle: 'Поездка и сбор чемодана',
     travelSubtitle:
-      'Укажите город и сколько дней продлится поездка — подберем вещи из гардероба по прогнозу на 7 дней.',
+      'Укажите город, дату начала и длительность поездки (1–14 дней) — подберем вещи из гардероба по прогнозу до 16 дней.',
     travelInputPlaceholder: 'Введите город (напр. Лондон, Дубай, Рим)...',
-    travelDaysLabel: 'Длительность (дней)',
+    travelStartDateLabel: 'Дата начала',
+    travelDaysLabel: 'Длительность (1–14 дн.)',
     travelNotePlaceholder: 'Заметка (напр. командировка, прогулки)',
     travelSaveBtn: 'Сохранить и собрать чемодан',
     travelSavedListTitle: 'Сохраненные города поездок',
     useCityBtn: 'Выбрать',
     removeCityBtn: 'Удалить',
     travelEmptyMsg: 'Пока нет сохраненных городов поездки. Добавьте город выше.',
-    weeklyForecastTitle: 'Прогноз погоды на 1 неделю (7 дней)',
+    weeklyForecastTitle: 'Прогноз погоды на поездку',
+    forecastDaysIncluded: 'Учтенные дни прогноза',
+    forecastPartialNote: 'Примечание: Open-Meteo предоставляет прогноз максимум на 16 дней; более поздние дни не охвачены.',
+    forecastOutOfRange: 'Выбранные даты выходят за пределы 16-дневного прогноза.',
     suitcaseTitle: 'Рекомендуемые вещи в чемодан (из гардероба)',
-    suitcaseSummary: 'дн. поездка • по прогнозу на 7 дней',
+    suitcaseSummary: 'дн. поездка • по прогнозу поездки',
     rainyWeekNote: 'На неделе ожидаются осадки — учтены влагозащитные вещи.',
     coldWeekNote: 'Ожидаются прохладные/холодные дни — добавлена верхняя одежда.',
     warmWeekNote: 'Ожидается теплая погода — выбраны более легкие вещи.',
@@ -738,6 +754,28 @@ function buildSmartOutfit(
   return nextOutfit;
 }
 
+const MAX_OPEN_METEO_DAYS = 16;
+const MAX_TRAVEL_DAYS = 14;
+
+function getLocalIsoDate(offsetDays = 0) {
+  const now = new Date();
+  const d = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate() + offsetDays));
+  return d.toISOString().slice(0, 10);
+}
+
+function addIsoDays(isoDate, deltaDays) {
+  if (!isoDate || typeof isoDate !== 'string') return getLocalIsoDate(deltaDays);
+  const [y, m, d] = isoDate.split('-').map(Number);
+  if (!y || !m || !d) return getLocalIsoDate(deltaDays);
+  return new Date(Date.UTC(y, m - 1, d + deltaDays)).toISOString().slice(0, 10);
+}
+
+function clampTravelDays(val) {
+  const parsed = Number.parseInt(val, 10);
+  if (Number.isNaN(parsed)) return 1;
+  return Math.max(1, Math.min(MAX_TRAVEL_DAYS, parsed));
+}
+
 function buildSuitcasePlan(items, weeklyDays, tripDays, lang = 'az') {
   if (!items || items.length === 0) {
     return { suggestedItems: [], note: '' };
@@ -807,17 +845,17 @@ function buildSuitcasePlan(items, weeklyDays, tripDays, lang = 'az') {
 
   let note = '';
   if (lang === 'en') {
-    if (isRainyWeek) note = 'High chance of rain during the week — waterproof items were prioritized.';
+    if (isRainyWeek) note = 'High chance of rain during the trip — waterproof items were prioritized.';
     else if (isColdWeek) note = 'Cool/cold days expected — outerwear and warmer pieces were included.';
     else note = 'Mild/warm days expected — lighter and breathable pieces were prioritized.';
   } else if (lang === 'ru') {
-    if (isRainyWeek) note = 'На неделе ожидаются осадки — учтены влагозащитные вещи.';
+    if (isRainyWeek) note = 'Во время поездки ожидаются осадки — учтены влагозащитные вещи.';
     else if (isColdWeek) note = 'Ожидаются прохладные/холодные дни — добавлена верхняя одежда.';
     else note = 'Ожидается теплая погода — выбраны более легкие вещи.';
   } else {
-    if (isRainyWeek) note = 'Həftə ərzində yağış ehtimalı yüksəkdir — suya davamlı geyimlərə üstünlük verildi.';
-    else if (isColdWeek) note = 'Həftə ərzində sərin/soyuq günlər var — üst örtük və isti parçalar əlavə olundu.';
-    else note = 'Həftə ərzində mülayim/isti hava gözlənilir — yüngül və nəfəs alan parçalar seçildi.';
+    if (isRainyWeek) note = 'Səyahət ərzində yağış ehtimalı yüksəkdir — suya davamlı geyimlərə üstünlük verildi.';
+    else if (isColdWeek) note = 'Səyahət ərzində sərin/soyuq günlər var — üst örtük və isti parçalar əlavə olundu.';
+    else note = 'Səyahət ərzində mülayim/isti hava gözlənilir — yüngül və nəfəs alan parçalar seçildi.';
   }
 
   return { suggestedItems, note };
@@ -929,8 +967,9 @@ export default function HomePage() {
   const [lockedSlots, setLockedSlots] = useState({});
   const [savedOutfits, setSavedOutfits] = useState([]);
 
-  // Travel / 1-week forecast & suitcase state
+  // Travel / forecast & suitcase state
   const [travelCityInput, setTravelCityInput] = useState('');
+  const [travelStartDateInput, setTravelStartDateInput] = useState(() => getLocalIsoDate(0));
   const [travelDaysInput, setTravelDaysInput] = useState(4);
   const [travelNoteInput, setTravelNoteInput] = useState('');
   const [travelCities, setTravelCities] = useState([]);
@@ -944,6 +983,11 @@ export default function HomePage() {
   useEffect(() => {
     txRef.current = tx;
   }, [tx]);
+
+  const userIdRef = useRef(null);
+  useEffect(() => {
+    userIdRef.current = user?.id ?? null;
+  }, [user]);
 
   const weatherAbortRef = useRef(null);
   const weeklyAbortRef = useRef(null);
@@ -970,14 +1014,6 @@ export default function HomePage() {
       if (savedLang === 'az' || savedLang === 'en' || savedLang === 'ru') {
         setLang(savedLang);
       }
-      const savedTravelList = localStorage.getItem('geyin_travel_cities');
-      if (savedTravelList) {
-        const parsed = JSON.parse(savedTravelList);
-        setTravelCities(parsed);
-        if (parsed.length > 0) {
-          setActiveTravelPlan(parsed[0]);
-        }
-      }
     } catch {
       // ignore
     }
@@ -1002,7 +1038,7 @@ export default function HomePage() {
     return () => clearTimeout(timer);
   }, [error]);
 
-  const fetchWeeklyForecast = useCallback(async (lat, lon) => {
+  const fetchWeeklyForecast = useCallback(async (lat, lon, startDate, daysCount) => {
     weeklyAbortRef.current?.abort();
     const controller = new AbortController();
     weeklyAbortRef.current = controller;
@@ -1011,12 +1047,19 @@ export default function HomePage() {
     setWeeklyForecastError('');
     setWeeklyForecast([]);
     try {
-      const days = await fetchDailyForecast(lat, lon, {
-        days: 7,
+      const allDays = await fetchDailyForecast(lat, lon, {
+        days: MAX_OPEN_METEO_DAYS,
         signal: controller.signal,
       });
       if (weeklyAbortRef.current !== controller) return;
-      setWeeklyForecast(days);
+
+      const effectiveStart = startDate || getLocalIsoDate(0);
+      const tripDays = clampTravelDays(daysCount);
+      const effectiveEnd = addIsoDays(effectiveStart, tripDays - 1);
+      const filtered = allDays.filter(
+        (day) => day.date >= effectiveStart && day.date <= effectiveEnd
+      );
+      setWeeklyForecast(filtered);
     } catch (err) {
       if (isAbortError(err) || weeklyAbortRef.current !== controller) return;
       const errMsg = txRef.current.weeklyForecastError;
@@ -1032,7 +1075,12 @@ export default function HomePage() {
 
   useEffect(() => {
     if (activeTravelPlan?.lat && activeTravelPlan?.lon) {
-      fetchWeeklyForecast(activeTravelPlan.lat, activeTravelPlan.lon);
+      fetchWeeklyForecast(
+        activeTravelPlan.lat,
+        activeTravelPlan.lon,
+        activeTravelPlan.startDate,
+        activeTravelPlan.days
+      );
     }
   }, [activeTravelPlan, fetchWeeklyForecast]);
 
@@ -1241,9 +1289,11 @@ export default function HomePage() {
 
   const persistManualLocation = useCallback((cityValue, lat, lon, label, mode = 'manual') => {
     setLocationMode(mode);
+    const uid = userIdRef.current;
+    if (!uid) return;
     try {
       localStorage.setItem(
-        'geyin_manual_location',
+        getManualLocationKey(uid),
         JSON.stringify({ city: cityValue, lat, lon, label, mode })
       );
     } catch {
@@ -1254,10 +1304,13 @@ export default function HomePage() {
   const detectGpsLocation = useCallback(() => {
     setDemoPresetId('live');
     setLocationMode('gps');
-    try {
-      localStorage.removeItem('geyin_manual_location');
-    } catch {
-      // ignore
+    const uid = userIdRef.current;
+    if (uid) {
+      try {
+        localStorage.removeItem(getManualLocationKey(uid));
+      } catch {
+        // ignore
+      }
     }
 
     if (typeof window === 'undefined' || !navigator.geolocation) {
@@ -1366,13 +1419,16 @@ export default function HomePage() {
       const label = place.country_code
         ? `${place.name} (${place.country_code})`
         : place.name;
-      const daysVal = Math.max(1, Math.min(14, Number(travelDaysInput) || 3));
+      const daysVal = clampTravelDays(travelDaysInput);
+      setTravelDaysInput(daysVal);
+      const startDateVal = travelStartDateInput || getLocalIsoDate(0);
 
       const entry = {
         id: Date.now(),
         name: place.name,
         code: place.country_code || '',
         label,
+        startDate: startDateVal,
         days: daysVal,
         note: travelNoteInput.trim(),
         lat: place.latitude,
@@ -1382,10 +1438,12 @@ export default function HomePage() {
       const nextList = [entry, ...travelCities.filter((c) => c.label !== label)].slice(0, 10);
       setTravelCities(nextList);
       setActiveTravelPlan(entry);
-      try {
-        localStorage.setItem('geyin_travel_cities', JSON.stringify(nextList));
-      } catch {
-        // ignore
+      if (user?.id) {
+        try {
+          localStorage.setItem(getTravelCitiesKey(user.id), JSON.stringify(nextList));
+        } catch {
+          // ignore
+        }
       }
 
       setDemoPresetId('live');
@@ -1393,7 +1451,7 @@ export default function HomePage() {
       persistManualLocation(entry.name, entry.lat, entry.lon, entry.label, 'travel');
       setLocationSource(`${tx.travelPinned}: ${entry.label}`);
       await fetchWeatherByCoords(entry.lat, entry.lon, entry.label);
-      await fetchWeeklyForecast(entry.lat, entry.lon);
+      await fetchWeeklyForecast(entry.lat, entry.lon, entry.startDate, entry.days);
       setTravelCityInput('');
       setTravelNoteInput('');
     } catch (err) {
@@ -1413,7 +1471,7 @@ export default function HomePage() {
     persistManualLocation(entry.name, entry.lat, entry.lon, entry.label, 'travel');
     setLocationSource(`${tx.travelPinned}: ${entry.label}`);
     await fetchWeatherByCoords(entry.lat, entry.lon, entry.label);
-    await fetchWeeklyForecast(entry.lat, entry.lon);
+    await fetchWeeklyForecast(entry.lat, entry.lon, entry.startDate, entry.days);
   };
 
   const handleRemoveTravelCity = (id) => {
@@ -1421,11 +1479,16 @@ export default function HomePage() {
     setTravelCities(nextList);
     if (activeTravelPlan?.id === id) {
       setActiveTravelPlan(nextList[0] || null);
+      if (!nextList[0]) {
+        setWeeklyForecast([]);
+      }
     }
-    try {
-      localStorage.setItem('geyin_travel_cities', JSON.stringify(nextList));
-    } catch {
-      // ignore
+    if (user?.id) {
+      try {
+        localStorage.setItem(getTravelCitiesKey(user.id), JSON.stringify(nextList));
+      } catch {
+        // ignore
+      }
     }
   };
 
@@ -1445,31 +1508,97 @@ export default function HomePage() {
     setLoadingItems(false);
   }, []);
 
-  const initLocationOnLogin = useCallback(() => {
-    let savedManual = null;
+  const migrateLegacyStorageKey = useCallback((legacyKey, scopedKey) => {
     try {
-      const raw = localStorage.getItem('geyin_manual_location');
-      if (raw) savedManual = JSON.parse(raw);
+      const legacyValue = localStorage.getItem(legacyKey);
+      if (legacyValue !== null) {
+        if (localStorage.getItem(scopedKey) === null) {
+          localStorage.setItem(scopedKey, legacyValue);
+        }
+        localStorage.removeItem(legacyKey);
+      }
     } catch {
       // ignore
     }
+  }, []);
 
-    if (savedManual && typeof savedManual.lat === 'number' && typeof savedManual.lon === 'number') {
-      const mode = savedManual.mode || 'manual';
-      setLocationMode(mode);
-      syncLocationControl(savedManual.city, savedManual.lat, savedManual.lon, savedManual.label || savedManual.city);
-      setLocationSource(
-        mode === 'search'
-          ? tx.citySearched
-          : mode === 'travel'
-          ? `${tx.travelPinned}: ${savedManual.label || savedManual.city}`
-          : tx.citySelected
-      );
-      fetchWeatherByCoords(savedManual.lat, savedManual.lon, savedManual.label || savedManual.city);
-    } else {
-      detectGpsLocation();
-    }
-  }, [detectGpsLocation, fetchWeatherByCoords, syncLocationControl, tx.citySearched, tx.citySelected, tx.travelPinned]);
+  const loadUserScopedState = useCallback(
+    (userId) => {
+      if (!userId) return;
+      migrateLegacyStorageKey('geyin_travel_cities', getTravelCitiesKey(userId));
+      migrateLegacyStorageKey('geyin_manual_location', getManualLocationKey(userId));
+      try {
+        const rawSaved = localStorage.getItem(getSavedOutfitsKey(userId));
+        const parsedSaved = rawSaved ? JSON.parse(rawSaved) : [];
+        setSavedOutfits(Array.isArray(parsedSaved) ? parsedSaved : []);
+      } catch {
+        setSavedOutfits([]);
+      }
+      try {
+        const rawTravel = localStorage.getItem(getTravelCitiesKey(userId));
+        const parsedTravel = rawTravel ? JSON.parse(rawTravel) : [];
+        if (Array.isArray(parsedTravel) && parsedTravel.length > 0) {
+          setTravelCities(parsedTravel);
+          setActiveTravelPlan(parsedTravel[0]);
+        } else {
+          setTravelCities([]);
+          setActiveTravelPlan(null);
+          setWeeklyForecast([]);
+        }
+      } catch {
+        setTravelCities([]);
+        setActiveTravelPlan(null);
+        setWeeklyForecast([]);
+      }
+    },
+    [migrateLegacyStorageKey]
+  );
+
+  const resetUserScopedState = useCallback(() => {
+    setItems([]);
+    setSavedOutfits([]);
+    setRecommendedOutfit(null);
+    setLockedSlots({});
+    setTravelCities([]);
+    setActiveTravelPlan(null);
+    setWeeklyForecast([]);
+    setOutfitStyleFilter('all');
+    setSelectedCategoryFilter('Hamısı');
+    setDemoPresetId('live');
+    setTravelCityInput('');
+    setTravelNoteInput('');
+  }, []);
+
+  const initLocationOnLogin = useCallback(
+    (userId) => {
+      let savedManual = null;
+      if (userId) {
+        try {
+          const raw = localStorage.getItem(getManualLocationKey(userId));
+          if (raw) savedManual = JSON.parse(raw);
+        } catch {
+          // ignore
+        }
+      }
+
+      if (savedManual && typeof savedManual.lat === 'number' && typeof savedManual.lon === 'number') {
+        const mode = savedManual.mode || 'manual';
+        setLocationMode(mode);
+        syncLocationControl(savedManual.city, savedManual.lat, savedManual.lon, savedManual.label || savedManual.city);
+        setLocationSource(
+          mode === 'search'
+            ? tx.citySearched
+            : mode === 'travel'
+            ? `${tx.travelPinned}: ${savedManual.label || savedManual.city}`
+            : tx.citySelected
+        );
+        fetchWeatherByCoords(savedManual.lat, savedManual.lon, savedManual.label || savedManual.city);
+      } else {
+        detectGpsLocation();
+      }
+    },
+    [detectGpsLocation, fetchWeatherByCoords, syncLocationControl, tx.citySearched, tx.citySelected, tx.travelPinned]
+  );
 
   const initLocationOnLoginRef = useRef(initLocationOnLogin);
   useEffect(() => {
@@ -1497,20 +1626,17 @@ export default function HomePage() {
       setLoading(false);
 
       if (currentUser) {
+        userIdRef.current = currentUser.id;
         if (loadedUserId !== currentUser.id) {
           loadedUserId = currentUser.id;
+          loadUserScopedState(currentUser.id);
           fetchItems(currentUser.id);
-          initLocationOnLoginRef.current();
-          try {
-            const raw = localStorage.getItem(`geyin_saved_${currentUser.id}`);
-            if (raw) setSavedOutfits(JSON.parse(raw));
-          } catch {
-            // ignore
-          }
+          initLocationOnLoginRef.current(currentUser.id);
         }
       } else {
+        userIdRef.current = null;
         loadedUserId = null;
-        setItems([]);
+        resetUserScopedState();
       }
     });
 
@@ -1518,7 +1644,7 @@ export default function HomePage() {
       active = false;
       authListener.subscription.unsubscribe();
     };
-  }, [fetchItems]);
+  }, [fetchItems, loadUserScopedState, resetUserScopedState]);
 
   useEffect(() => {
     if (outfitWeatherCore && items.length > 0) {
@@ -1620,7 +1746,7 @@ export default function HomePage() {
     const updatedList = [newSaved, ...savedOutfits].slice(0, 12);
     setSavedOutfits(updatedList);
     try {
-      localStorage.setItem(`geyin_saved_${user.id}`, JSON.stringify(updatedList));
+      localStorage.setItem(getSavedOutfitsKey(user.id), JSON.stringify(updatedList));
     } catch {
       // ignore
     }
@@ -1639,7 +1765,7 @@ export default function HomePage() {
     const updatedList = savedOutfits.filter((o) => o.id !== savedId);
     setSavedOutfits(updatedList);
     try {
-      localStorage.setItem(`geyin_saved_${user.id}`, JSON.stringify(updatedList));
+      localStorage.setItem(getSavedOutfitsKey(user.id), JSON.stringify(updatedList));
     } catch {
       // ignore
     }
@@ -1672,6 +1798,8 @@ export default function HomePage() {
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
+    userIdRef.current = null;
+    resetUserScopedState();
     setMessage('');
     setError('');
   };
@@ -2033,6 +2161,14 @@ export default function HomePage() {
       ]
     : [];
 
+  const activeTravelDays = clampTravelDays(activeTravelPlan?.days || travelDaysInput);
+  const activeTravelStart = activeTravelPlan?.startDate || getLocalIsoDate(0);
+  const activeTravelEnd = addIsoDays(activeTravelStart, activeTravelDays - 1);
+  const todayIso = getLocalIsoDate(0);
+  const maxForecastIso = getLocalIsoDate(MAX_OPEN_METEO_DAYS - 1);
+  const coveredStartDate = weeklyForecast[0]?.date;
+  const coveredEndDate = weeklyForecast[weeklyForecast.length - 1]?.date;
+
   return (
     <main className={`app-shell min-h-screen ${t.page} p-4 md:p-8 transition-colors duration-300`} data-theme={isDark ? 'dark' : 'light'}>
       <div className="app-content max-w-6xl mx-auto space-y-6">
@@ -2089,27 +2225,40 @@ export default function HomePage() {
               <p className={`text-xs ${t.muted} mt-1`}>{tx.travelSubtitle}</p>
             </div>
 
-            <form onSubmit={handleAddTravelCity} className="grid grid-cols-1 md:grid-cols-4 gap-3">
-              <input
-                type="text"
-                required
-                value={travelCityInput}
-                onChange={(e) => setTravelCityInput(e.target.value)}
-                placeholder={tx.travelInputPlaceholder}
-                className={`md:col-span-2 rounded-xl ${t.surface} border px-3.5 py-2.5 text-xs focus:outline-none`}
-              />
+            <form onSubmit={handleAddTravelCity} className="grid grid-cols-1 md:grid-cols-6 gap-3">
+              <div className="md:col-span-2 flex items-end">
+                <input
+                  type="text"
+                  required
+                  value={travelCityInput}
+                  onChange={(e) => setTravelCityInput(e.target.value)}
+                  placeholder={tx.travelInputPlaceholder}
+                  className={`w-full rounded-xl ${t.surface} border px-3.5 py-2.5 text-xs focus:outline-none`}
+                />
+              </div>
+              <div>
+                <label className={`block text-[10px] ${t.muted} mb-1`}>{tx.travelStartDateLabel}</label>
+                <input
+                  type="date"
+                  min={todayIso}
+                  max={maxForecastIso}
+                  value={travelStartDateInput}
+                  onChange={(e) => setTravelStartDateInput(e.target.value || getLocalIsoDate(0))}
+                  className={`w-full rounded-xl ${t.surface} border px-3 py-2 text-xs focus:outline-none`}
+                />
+              </div>
               <div>
                 <label className={`block text-[10px] ${t.muted} mb-1`}>{tx.travelDaysLabel}</label>
                 <input
                   type="number"
                   min={1}
-                  max={14}
+                  max={MAX_TRAVEL_DAYS}
                   value={travelDaysInput}
                   onChange={(e) => setTravelDaysInput(e.target.value)}
                   className={`w-full rounded-xl ${t.surface} border px-3.5 py-2 text-xs focus:outline-none`}
                 />
               </div>
-              <div className="flex items-end">
+              <div className="md:col-span-2 flex items-end">
                 <button
                   type="submit"
                   disabled={savingTravelCity}
@@ -2123,18 +2272,26 @@ export default function HomePage() {
                 value={travelNoteInput}
                 onChange={(e) => setTravelNoteInput(e.target.value)}
                 placeholder={tx.travelNotePlaceholder}
-                className={`md:col-span-4 rounded-xl ${t.surface} border px-3.5 py-2.5 text-xs focus:outline-none`}
+                className={`md:col-span-6 rounded-xl ${t.surface} border px-3.5 py-2.5 text-xs focus:outline-none`}
               />
             </form>
 
-            {/* 1-Week Forecast */}
+            {/* Trip Forecast */}
             {activeTravelPlan && (
               <div className={`space-y-3 pt-4 border-t ${t.border}`}>
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <h3 className="text-sm font-semibold">
-                    {tx.weeklyForecastTitle} — {activeTravelPlan.label} ({activeTravelPlan.days || 3}{' '}
-                    {tx.daysUnit})
-                  </h3>
+                  <div>
+                    <h3 className="text-sm font-semibold">
+                      {tx.weeklyForecastTitle} — {activeTravelPlan.label} ({activeTravelDays}{' '}
+                      {tx.daysUnit})
+                    </h3>
+                    <p className={`text-[11px] ${t.muted} mt-0.5`}>
+                      {activeTravelStart} – {activeTravelEnd}
+                      {coveredStartDate && coveredEndDate
+                        ? ` • ${tx.forecastDaysIncluded}: ${coveredStartDate} – ${coveredEndDate} (${weeklyForecast.length}/${activeTravelDays} ${tx.daysUnit})`
+                        : ''}
+                    </p>
+                  </div>
                   {activeTravelPlan.note && (
                     <span className={`text-xs ${t.muted}`}>{activeTravelPlan.note}</span>
                   )}
@@ -2146,21 +2303,28 @@ export default function HomePage() {
                   <p role="alert" className="text-xs text-red-500">
                     {weeklyForecastError}
                   </p>
+                ) : weeklyForecast.length === 0 ? (
+                  <p className={`text-xs ${t.muted}`}>{tx.forecastOutOfRange}</p>
                 ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2.5">
-                    {weeklyForecast.map((day) => (
-                      <div
-                        key={day.date}
-                        className={`rounded-xl ${t.surface} border p-3 text-center space-y-1`}
-                      >
-                        <p className={`text-[11px] font-semibold ${t.subtext}`}>{day.date}</p>
-                        <p className="text-sm font-bold">
-                          {day.maxTemp}° / {day.minTemp}°
-                        </p>
-                        <p className="text-[11px] text-sky-400">💧 {day.rainProb}%</p>
-                      </div>
-                    ))}
-                  </div>
+                  <>
+                    {weeklyForecast.length < activeTravelDays && (
+                      <p className="text-xs text-amber-500">{tx.forecastPartialNote}</p>
+                    )}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2.5">
+                      {weeklyForecast.map((day) => (
+                        <div
+                          key={day.date}
+                          className={`rounded-xl ${t.surface} border p-3 text-center space-y-1`}
+                        >
+                          <p className={`text-[11px] font-semibold ${t.subtext}`}>{day.date}</p>
+                          <p className="text-sm font-bold">
+                            {day.maxTemp}° / {day.minTemp}°
+                          </p>
+                          <p className="text-[11px] text-sky-400">💧 {day.rainProb}%</p>
+                        </div>
+                      ))}
+                    </div>
+                  </>
                 )}
               </div>
             )}
@@ -2171,7 +2335,10 @@ export default function HomePage() {
                 <div>
                   <h3 className="text-sm font-semibold">{tx.suitcaseTitle}</h3>
                   <p className={`text-xs ${t.muted} mt-0.5`}>
-                    {activeTravelPlan.days || 3} {tx.suitcaseSummary}
+                    {activeTravelDays} {tx.suitcaseSummary}
+                    {coveredStartDate && coveredEndDate
+                      ? ` (${coveredStartDate} – ${coveredEndDate}, ${weeklyForecast.length}/${activeTravelDays} ${tx.daysUnit})`
+                      : ''}
                   </p>
                   {suitcasePlan.note && (
                     <p className="text-xs text-emerald-400 mt-1">{suitcasePlan.note}</p>
@@ -2225,7 +2392,7 @@ export default function HomePage() {
                     >
                       <div>
                         <p className="text-xs font-semibold">
-                          {c.label} • {c.days || 3} {tx.daysUnit}
+                          {c.label} • {c.startDate ? `${c.startDate} • ` : ''}{c.days || 3} {tx.daysUnit}
                         </p>
                         {c.note && <p className={`text-[11px] ${t.muted} mt-0.5`}>{c.note}</p>}
                       </div>
