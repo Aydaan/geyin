@@ -118,7 +118,7 @@ export default function OutfitGrid({
                       className={`min-h-[28px] min-w-[44px] text-xs px-2.5 py-1 rounded-lg transition cursor-pointer active:scale-95 ${FOCUS_RING} ${
                         isLocked
                           ? 'bg-amber-100 text-amber-900 border border-amber-300 font-semibold dark:bg-amber-400/20 dark:text-amber-300 dark:border-transparent'
-                          : 'text-muted hover:bg-zinc-500/10'
+                          : 'text-muted hover:text-text hover:bg-surface-muted'
                       }`}
                     >
                       {isLocked ? tx.locked : tx.lock}

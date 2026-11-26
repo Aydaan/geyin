@@ -68,7 +68,7 @@ export default function SavedOutfits({
                 <button
                   type="button"
                   onClick={() => onDeleteSavedOutfit(saved.id)}
-                  className={`min-h-[32px] px-2.5 py-1 rounded-lg text-xs text-muted hover:text-red-500 transition cursor-pointer ${FOCUS_RING}`}
+                  className={`min-h-[32px] px-2.5 py-1 rounded-lg text-xs text-muted hover:text-red-600 dark:hover:text-red-400 transition cursor-pointer ${FOCUS_RING}`}
                 >
                   {tx.deleteBtn}
                 </button>
