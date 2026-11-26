@@ -2,632 +2,91 @@
 
 import { useEffect, useState, useCallback, useMemo, useRef, useSyncExternalStore } from 'react';
 import { supabase } from '@/lib/supabase';
+import { CATEGORIES, STYLES, UI_TEXT, getText } from '@/lib/i18n';
 import {
+  WORLD_CITIES,
+  findNearestCity,
+  findWorldCityMatch,
+} from '@/lib/cities';
+import {
+  DEMO_PRESETS,
   fetchCurrentWeather,
   fetchDailyForecast,
   searchGeocodingCity,
   isAbortError,
+  resolveActiveWeather,
+  interpretWeather,
 } from '@/lib/weather';
 import {
-  WORLD_CITIES,
-  findNearestCity,
-  interpretWeather,
   buildSmartOutfit,
   buildSuitcasePlan,
-  formatForecastDate,
-  MAX_OPEN_METEO_DAYS,
-  clampTravelDays,
-  getLocalIsoDate,
-  addIsoDays,
-} from '@/lib/wardrobe-logic';
+  computeWardrobeInsights,
+} from '@/lib/outfit';
 import {
   CLOTHES_BUCKET,
   SIGNED_URL_TTL_SECONDS,
   extractClothesStoragePath,
   generateSafeStoragePath,
-  resolveClothesImageUrl,
   resolveWardrobeItemUrls,
   validateImageFile,
 } from '@/lib/storage';
 
-const getSavedOutfitsKey = (userId) => `geyin_saved_${userId}`;
-const getTravelCitiesKey = (userId) => `geyin_travel_cities_${userId}`;
-const getManualLocationKey = (userId) => `geyin_manual_location_${userId}`;
+import TopControls from '@/components/TopControls';
+import AuthForm from '@/components/AuthForm';
+import WeatherPanel from '@/components/WeatherPanel';
+import TravelPanel from '@/components/TravelPanel';
+import WardrobeInsights from '@/components/WardrobeInsights';
+import SavedOutfits from '@/components/SavedOutfits';
+import WardrobeForm from '@/components/WardrobeForm';
+import WardrobeList from '@/components/WardrobeList';
 
-const CATEGORIES = [
-  {
-    value: 'Üst geyim',
-    label: { az: 'Üst geyim', en: 'Top', ru: 'Верх' },
-  },
-  {
-    value: 'Alt geyim',
-    label: { az: 'Alt geyim', en: 'Bottom', ru: 'Низ' },
-  },
-  {
-    value: 'Üst örtük (Gödəkçə/Palto)',
-    label: {
-      az: 'Üst örtük (Gödəkçə/Palto)',
-      en: 'Outerwear (Jacket/Coat)',
-      ru: 'Верхняя одежда (Куртка/Пальто)',
-    },
-  },
-  {
-    value: 'Ayaqqabı',
-    label: { az: 'Ayaqqabı', en: 'Shoes', ru: 'Обувь' },
-  },
-  {
-    value: 'Aksesuar',
-    label: { az: 'Aksesuar', en: 'Accessory', ru: 'Аксессуар' },
-  },
-];
+const PREFS_EVENT = 'geyin-prefs-change';
+const MAX_OPEN_METEO_DAYS = 16;
+const MAX_TRAVEL_DAYS = 14;
 
-const STYLES = [
-  { value: 'gundelik', label: { az: 'Gündəlik', en: 'Casual', ru: 'Повседневный' } },
-  { value: 'klassik', label: { az: 'Klassik / İş', en: 'Classic / Work', ru: 'Классика / Офис' } },
-  { value: 'idman', label: { az: 'İdman', en: 'Sporty', ru: 'Спортивный' } },
-  { value: 'gece', label: { az: 'Xüsusi / Axşam', en: 'Evening / Special', ru: 'Вечерний' } },
-];
-
-const DEMO_PRESETS = [
-  { id: 'live', label: { az: 'Canlı Hava', en: 'Live Weather', ru: 'Живая погода' } },
-  {
-    id: 'sunny',
-    label: { az: 'Günəşli 25°C', en: 'Sunny 25°C', ru: 'Солнечно 25°C' },
-    temp: 25,
-    apparent: 26,
-    wind: 10,
-    code: 0,
-    minTemp: 19,
-    maxTemp: 26,
-    rainProb: 5,
-  },
-  {
-    id: 'rainy',
-    label: { az: 'Yağışlı 10°C', en: 'Rainy 10°C', ru: 'Дождь 10°C' },
-    temp: 10,
-    apparent: 8,
-    wind: 22,
-    code: 63,
-    minTemp: 7,
-    maxTemp: 12,
-    rainProb: 85,
-  },
-  {
-    id: 'snowy',
-    label: { az: 'Qarlı 0°C', en: 'Snowy 0°C', ru: 'Снег 0°C' },
-    temp: 0,
-    apparent: -4,
-    wind: 30,
-    code: 73,
-    minTemp: -3,
-    maxTemp: 2,
-    rainProb: 90,
-  },
-];
-
-const UI_TEXT = {
-  az: {
-    loading: 'Yüklənir...',
-    loginSubtitle: 'Hava şəraitinə uyğun kombinlər üçün hesabına daxil ol.',
-    registerSubtitle: 'Yeni hesab yarat və qarderobunu qur.',
-    email: 'E-poçt',
-    password: 'Şifrə',
-    passwordHint: 'Ən az 6 simvol',
-    signIn: 'Daxil ol',
-    signUp: 'Qeydiyyatdan keç',
-    pleaseWait: 'Gözləyin...',
-    haveAccount: 'Artıq hesabın var? Daxil ol',
-    noAccount: 'Hesabın yoxdur? Yeni hesab yarat',
-    logout: 'Çıxış et',
-    tabToday: 'Bugünkü Hava & Kombin',
-    tabTravel: 'Səyahət Şəhəri',
-    liveWeatherTitle: 'Canlı Hava & Ağıllı Kombin',
-    gpsFinding: 'GPS ilə məkan tapılır...',
-    gpsFound: 'GPS ilə tapıldı',
-    gpsDenied: 'GPS icazəsi verilmədi (şəhər seçin)',
-    gpsUnsupported: 'GPS dəstəklənmir (şəhər seçildi)',
-    citySelected: 'Əl ilə seçildi (GPS kilidlənib)',
-    citySearched: 'Axtarışla seçildi (GPS kilidlənib)',
-    travelPinned: 'Səyahət şəhəri aktivdir',
-    checkingWeather: 'Hava yoxlanılır...',
-    chooseLocation: 'Məkan seçin',
-    feelsLike: 'Hiss olunan',
-    dailyRange: 'Günlük',
-    wind: 'Külək',
-    kmh: 'km/saat',
-    gpsBtn: 'GPS ilə tap',
-    searchCityPlaceholder: 'Dünya şəhəri axtar (məs: Tokyo, Paris)...',
-    searchBtn: 'Tap',
-    searching: 'Axtarılır...',
-    cityNotFound: 'Şəhər tapılmadı, başqa ad yoxlayın.',
-    weatherFetchError: 'Hava məlumatı alınarkən xəta baş verdi. Yenidən cəhd edin.',
-    weeklyForecastError: 'Həftəlik hava proqnozu yüklənə bilmədi. Yenidən cəhd edin.',
-    geocodingError: 'Şəhər axtarışı zamanı xəta baş verdi. Yenidən cəhd edin.',
-    demoMode: 'Hava rejimi (Demo test):',
-    generalAdviceTitle: 'Ümumi geyim məsləhəti:',
-    todayOutfitTitle: 'Qarderobundan bugünkü kombin',
-    whyOutfit: 'Niyə bu kombin:',
-    defaultOutfitSub: 'Hava temperaturu və yağış/külək göstəricilərinə uyğun seçildi',
-    allStyles: 'Bütün stillər',
-    generateAnother: 'Başqa kombin yarat',
-    saveOutfit: 'Yadda saxla',
-    savedToast: 'Kombin "Sevimli kombinlərim" bölməsinə əlavə olundu!',
-    loadedToast: 'Sevimli kombin əsas sahəyə yükləndi.',
-    travelTitle: 'Səyahət və valiz tövsiyəsi',
-    travelSubtitle:
-      'Gedəcəyin şəhəri, başlama tarixini və neçə günlük (1–14 gün) səyahət etdiyini seç — 16 günlük hava proqnozuna əsasən valizə qoyulacaq paltarları seçək.',
-    travelInputPlaceholder: 'Gedəcəyin şəhəri yaz (məs: London, Dubai, Rome)...',
-    travelStartDateLabel: 'Başlama tarixi',
-    travelDaysLabel: 'Səyahət müddəti (1–14 gün)',
-    travelNotePlaceholder: 'Əlavə qeyd (məs: iş səfəri, gəzinti)',
-    travelSaveBtn: 'Şəhəri qeyd et və valizi hazırla',
-    travelSavedListTitle: 'Qeyd etdiyin səyahət şəhərləri',
-    useCityBtn: 'Bu şəhəri seç',
-    removeCityBtn: 'Çıxar',
-    travelEmptyMsg: 'Hələ səyahət şəhəri qeyd etməmisən. Yuxarıdan gedəcəyin şəhəri əlavə et.',
-    weeklyForecastTitle: 'Səyahət hava proqnozu',
-    forecastDaysIncluded: 'Nəzərə alınan günlər',
-    forecastPartialNote: 'Qeyd: Open-Meteo maksimum 16 günlük proqnoz təqdim edir; əhatə olunmayan sonrakı günlər proqnoza daxil deyil.',
-    forecastOutOfRange: 'Seçilmiş tarixlər 16 günlük proqnoz pəncərəsindən kənarda qalır.',
-    suitcaseTitle: 'Valizə qoyulacaq geyimlər (Qarderobundan)',
-    suitcaseSummary: 'günlük səyahət • proqnoz əsasında seçildi',
-    rainyWeekNote: 'Səyahət ərzində yağış ehtimalı yüksəkdir — suya davamlı geyimlərə üstünlük verildi.',
-    coldWeekNote: 'Səyahət ərzində sərin/soyuq günlər var — üst örtük və isti parçalar əlavə olundu.',
-    warmWeekNote: 'Səyahət ərzində mülayim/isti hava gözlənilir — yüngül və nəfəs alan parçalar seçildi.',
-    emptySuitcaseMsg: 'Valiz tövsiyəsi qurmaq üçün əvvəlcə qarderobuna paltar əlavə et.',
-    daysUnit: 'günlük',
-    emptyWardrobeOutfit:
-      'Qarderobunda hələ paltar yoxdur. Aşağıdan üst geyim, alt geyim və ayaqqabı əlavə et ki, avtomatik kombin quraq!',
-    locked: 'Kilidli',
-    lock: 'Kilidlə',
-    swap: 'Dəyiş',
-    notFoundInSlot: 'Qarderobda bu kateqoriya tapılmadı',
-    warmthShort: 'İstilik',
-    totalItems: 'Ümumi parça',
-    avgWarmth: 'Orta istilik',
-    waterproofCount: 'Suya davamlı',
-    piecesUnit: 'ədəd',
-    savedOutfitsTitle: 'Sevimli kombinlərim',
-    loadBtn: 'Yüklə',
-    deleteBtn: 'Sil',
-    addNewItemTitle: 'Yeni paltar əlavə et',
-    photoLabel: 'Paltar şəkli *',
-    photoRequired: 'Zəhmət olmasa paltar şəkli seçin.',
-    photoInvalidType: 'Yalnız etibarlı şəkil faylları (JPEG, PNG, WebP, GIF) yüklənə bilər.',
-    photoTooLarge: 'Şəkil ölçüsü 5 MB-dan böyük olmamalıdır.',
-    chooseFileBtn: 'Fayl seç',
-    noFileChosen: 'Fayl seçilmədi',
-    previewReady: 'Seçilmiş şəkil hazırdır',
-    categoryLabel: 'Kateqoriya *',
-    subCategoryLabel: 'Alt kateqoriya (məs: Hudi, Cins)',
-    subCategoryPlaceholder: 'Məsələn: Oversize hudi',
-    colorLabel: 'Rəng',
-    colorPlaceholder: 'Məsələn: Qara, Bej, Göy',
-    styleLabel: 'Stil',
-    warmthSlider: 'İstilik səviyyəsi (1 = çox nazik, 5 = çox qalın)',
-    waterproofCheck: 'Suya davamlı (yağış üçün)',
-    windproofCheck: 'Küləyə davamlı',
-    addToWardrobeBtn: 'Qarderoba əlavə et',
-    uploadingBtn: 'Yüklənir...',
-    addedToast: 'Paltar qarderoba əlavə olundu!',
-    myItemsTitle: 'Əşyalarım',
-    allFilter: 'Hamısı',
-    loadingWardrobe: 'Qarderob yüklənir...',
-    emptyCategoryMsg:
-      'Bu kateqoriyada hələ paltar yoxdur. Yuxarıdakı formadan ilk paltarını əlavə et!',
-    waterproofBadge: 'Suya davamlı',
-    windproofBadge: 'Küləyə davamlı',
-    auto: 'Avto',
-    light: 'Açıq',
-    dark: 'Qaranlıq',
-    closeNotification: 'Bildirişi bağla',
-    locationModeLabels: {
-      gps: 'GPS',
-      manual: 'Əl ilə',
-      search: 'Axtarış',
-      travel: 'Səyahət',
-    },
-    signUpSuccess: 'Qeydiyyat tamamlandı! Hesabını təsdiqləmək üçün e-poçtunu yoxla.',
-    genericError: 'Xəta baş verdi.',
-    weatherFetchError: 'Hava məlumatı alınarkən xəta baş verdi.',
-    previewAlt: 'Seçilmiş paltar şəklinin önizləməsi',
-    gpsLocationPrefix: 'GPS Məkanı',
-    demoSuffix: '(Demo Simulyasiya)',
-    wardrobeBalanced: 'Qarderobun bütün əsas kateqoriyalar üzrə balanslıdır.',
-    wardrobeMissingPrefix: 'Tam kombinlər üçün çatışmayan kateqoriya',
-    wardrobeWaterproofTip:
-      'Yağışlı günlər üçün qarderobuna ən azı 1 suya davamlı üst örtük və ya ayaqqabı əlavə etməyin tövsiyə olunur.',
-    weatherConditions: {
-      snow: 'Qarlı',
-      rain: 'Yağışlı',
-      fog: 'Dumanlı',
-      clear: 'Günəşli və açıq',
-      clouds: 'Dəyişkən buludlu',
-      default: 'Açıq / Buludlu',
-    },
-    weatherTips: {
-      veryCold: 'Hava çox soyuqdur: qalın palto/gödəkçə, sviter və qapalı isti ayaqqabı seç.',
-      chilly: 'Hava sərindir: qat-qat geyim (köynək/hudi + gödəkçə) ən ideal seçimdir.',
-      mild: 'Mülayim hava var: yüngül üst geyim və nazik pencək/jaket kifayət edər.',
-      warm: 'İsti və komfortlu havadır: nəfəs alan pambıq/kətan köynək və rahat şalvar uyğundur.',
-      hot: 'Çox isti havadır: açıq rəngli, çox nazik (istilik 1-2) parçalara üstünlük ver.',
-      precipitation: 'Yağıntı var: suya davamlı üst örtük və ayaqqabı götürməyi unutma.',
-      strongWind: 'Külək güclüdür ({wind} km/saat): küləyə davamlı gödəkçə geyin.',
-      eveningDrop:
-        'Axşam temperatur {minTemp}°C-yə qədər düşəcək — çölə çıxanda üst örtük götürməyin məsləhətdir.',
-      rainChance:
-        'Gün ərzində yağıntı ehtimalı {rainProb}%-dir — suya davamlı parça seçmək faydalı olar.',
-    },
-    outfitReasons: {
-      targetedWarmth: '{temp}°C hava üçün ideal istilik ({warmth}/5) hədəfləndi',
-      waterproof: 'yağışa qarşı suya davamlı parça seçildi',
-      windproof: 'küləyə davamlı qoruma əlavə edildi',
-      colorHarmony: '{colors} rəng harmoniyası uyğunlaşdırıldı',
-    },
-    languageGroupLabel: 'Dil seçimi',
-    themeGroupLabel: 'Tema seçimi',
-    deleteConfirmTitle: 'Paltarı silmək istəyirsən?',
-    deleteConfirmBody: 'Bu paltar qarderobundan, saxlanmış kombinlərindən və yaddaşdan birdəfəlik silinəcək.',
-    deleteConfirmBtn: 'Bəli, sil',
-    deletingBtn: 'Silinir...',
-    cancelBtn: 'Ləğv et',
-    itemDeletedToast: 'Paltar qarderobdan silindi.',
-    slotLabels: {
-      top: 'Üst geyim',
-      bottom: 'Alt geyim',
-      outerwear: 'Üst örtük',
-      shoes: 'Ayaqqabı',
-      accessory: 'Aksesuar',
-    },
-  },
-  en: {
-    loading: 'Loading...',
-    loginSubtitle: 'Sign in for weather-smart outfits from your wardrobe.',
-    registerSubtitle: 'Create an account and build your digital wardrobe.',
-    email: 'Email',
-    password: 'Password',
-    passwordHint: 'At least 6 characters',
-    signIn: 'Sign in',
-    signUp: 'Sign up',
-    pleaseWait: 'Please wait...',
-    haveAccount: 'Already have an account? Sign in',
-    noAccount: "Don't have an account? Create one",
-    logout: 'Sign out',
-    tabToday: 'Today Weather & Outfit',
-    tabTravel: 'Travel City',
-    liveWeatherTitle: 'Live Weather & Smart Outfit',
-    gpsFinding: 'Detecting location via GPS...',
-    gpsFound: 'Located via GPS',
-    gpsDenied: 'GPS denied (select a city)',
-    gpsUnsupported: 'GPS unsupported (city selected)',
-    citySelected: 'Manually selected (GPS paused)',
-    citySearched: 'Found via search (GPS paused)',
-    travelPinned: 'Travel city active',
-    checkingWeather: 'Checking weather...',
-    chooseLocation: 'Choose a location',
-    feelsLike: 'Feels like',
-    dailyRange: 'Daily',
-    wind: 'Wind',
-    kmh: 'km/h',
-    gpsBtn: 'Use GPS',
-    searchCityPlaceholder: 'Search any world city (e.g. Tokyo, Paris)...',
-    searchBtn: 'Find',
-    searching: 'Searching...',
-    cityNotFound: 'City not found. Try another name.',
-    weatherFetchError: 'Failed to load weather data. Please try again.',
-    weeklyForecastError: 'Failed to load weekly forecast. Please try again.',
-    geocodingError: 'City search failed. Please try again.',
-    demoMode: 'Weather mode (Demo test):',
-    generalAdviceTitle: 'General dressing tip:',
-    todayOutfitTitle: "Today's outfit from your wardrobe",
-    whyOutfit: 'Why this outfit:',
-    defaultOutfitSub: 'Selected based on temperature, rain, and wind',
-    allStyles: 'All styles',
-    generateAnother: 'Generate another',
-    saveOutfit: 'Save outfit',
-    savedToast: 'Outfit added to Saved Outfits!',
-    loadedToast: 'Saved outfit loaded into main view.',
-    travelTitle: 'Travel & Suitcase Guide',
-    travelSubtitle:
-      'Enter your destination city, start date, and trip length (1–14 days) — we pick suitcase items from your wardrobe using up to 16 days of forecast.',
-    travelInputPlaceholder: 'Enter destination city (e.g. London, Dubai, Rome)...',
-    travelStartDateLabel: 'Start date',
-    travelDaysLabel: 'Trip length (1–14 days)',
-    travelNotePlaceholder: 'Note (e.g. work trip, sightseeing)',
-    travelSaveBtn: 'Save city & build suitcase',
-    travelSavedListTitle: 'Saved travel cities',
-    useCityBtn: 'Use city',
-    removeCityBtn: 'Remove',
-    travelEmptyMsg: 'No travel cities saved yet. Add a destination city above.',
-    weeklyForecastTitle: 'Trip Weather Forecast',
-    forecastDaysIncluded: 'Forecast days included',
-    forecastPartialNote: 'Note: Open-Meteo provides forecasts up to 16 days ahead; days beyond that window are not covered.',
-    forecastOutOfRange: 'Selected dates are outside the 16-day forecast window.',
-    suitcaseTitle: 'Suggested Suitcase Items (From Your Wardrobe)',
-    suitcaseSummary: 'day trip • tailored to trip forecast',
-    rainyWeekNote: 'High chance of rain during the trip — waterproof items were prioritized.',
-    coldWeekNote: 'Cool/cold days expected — outerwear and warmer pieces were included.',
-    warmWeekNote: 'Mild/warm days expected — lighter and breathable pieces were prioritized.',
-    emptySuitcaseMsg: 'Add items to your wardrobe first to get suitcase recommendations.',
-    daysUnit: 'days',
-    emptyWardrobeOutfit:
-      'Your wardrobe is empty. Add tops, bottoms, and shoes below to generate smart outfits!',
-    locked: 'Locked',
-    lock: 'Lock',
-    swap: 'Swap',
-    notFoundInSlot: 'No item found in this category',
-    warmthShort: 'Warmth',
-    totalItems: 'Total items',
-    avgWarmth: 'Avg warmth',
-    waterproofCount: 'Waterproof',
-    piecesUnit: 'items',
-    savedOutfitsTitle: 'Saved Outfits',
-    loadBtn: 'Load',
-    deleteBtn: 'Delete',
-    addNewItemTitle: 'Add new clothing item',
-    photoLabel: 'Clothing photo *',
-    photoRequired: 'Please choose a clothing photo.',
-    photoInvalidType: 'Only valid image files (JPEG, PNG, WebP, GIF) are allowed.',
-    photoTooLarge: 'Image size must be 5 MB or less.',
-    chooseFileBtn: 'Choose file',
-    noFileChosen: 'No file chosen',
-    previewReady: 'Selected photo ready',
-    categoryLabel: 'Category *',
-    subCategoryLabel: 'Subcategory (e.g. Hoodie, Jeans)',
-    subCategoryPlaceholder: 'e.g. Oversized hoodie',
-    colorLabel: 'Color',
-    colorPlaceholder: 'e.g. Black, Beige, Blue',
-    styleLabel: 'Style',
-    warmthSlider: 'Warmth level (1 = very thin, 5 = very thick)',
-    waterproofCheck: 'Waterproof (for rain)',
-    windproofCheck: 'Windproof',
-    addToWardrobeBtn: 'Add to wardrobe',
-    uploadingBtn: 'Uploading...',
-    addedToast: 'Item added to your wardrobe!',
-    myItemsTitle: 'My Items',
-    allFilter: 'All',
-    loadingWardrobe: 'Loading wardrobe...',
-    emptyCategoryMsg: 'No items in this category yet. Add your first item above!',
-    waterproofBadge: 'Waterproof',
-    windproofBadge: 'Windproof',
-    auto: 'Auto',
-    light: 'Light',
-    dark: 'Dark',
-    closeNotification: 'Dismiss notification',
-    locationModeLabels: {
-      gps: 'GPS',
-      manual: 'Manual',
-      search: 'Search',
-      travel: 'Travel',
-    },
-    signUpSuccess: 'Account created! Please check your email to confirm your account.',
-    genericError: 'An error occurred.',
-    weatherFetchError: 'An error occurred while fetching weather data.',
-    previewAlt: 'Selected clothing preview',
-    gpsLocationPrefix: 'GPS Location',
-    demoSuffix: '(Demo)',
-    wardrobeBalanced: 'Your wardrobe is balanced across core categories.',
-    wardrobeMissingPrefix: 'Missing categories for full outfits',
-    wardrobeWaterproofTip: 'Consider adding at least 1 waterproof outer layer or shoe for rainy days.',
-    weatherConditions: {
-      snow: 'Snowy',
-      rain: 'Rainy',
-      fog: 'Foggy',
-      clear: 'Sunny & clear',
-      clouds: 'Partly cloudy',
-      default: 'Clear / Cloudy',
-    },
-    weatherTips: {
-      veryCold: 'Very cold: pick a heavy coat/jacket, knitwear, and warm closed shoes.',
-      chilly: 'Chilly weather: layering (tee/hoodie + jacket) works best.',
-      mild: 'Mild weather: a light top and thin jacket or overshirt is enough.',
-      warm: 'Warm & pleasant: breathable cotton/linen top and comfortable pants fit well.',
-      hot: 'Very hot: prefer light colors and thin (warmth 1–2) breathable fabrics.',
-      precipitation: "Precipitation expected: don't forget waterproof outerwear and shoes.",
-      strongWind: 'Strong wind ({wind} km/h): wear a windproof layer.',
-      eveningDrop:
-        'Temperature will drop to {minTemp}°C in the evening — taking an outer layer is recommended.',
-      rainChance: 'Precipitation chance today is {rainProb}% — a waterproof piece is helpful.',
-    },
-    outfitReasons: {
-      targetedWarmth: 'targeted warmth ({warmth}/5) for {temp}°C',
-      waterproof: 'added waterproof protection',
-      windproof: 'added windproof protection',
-      colorHarmony: 'balanced {colors} colors',
-    },
-    languageGroupLabel: 'Language selection',
-    themeGroupLabel: 'Theme selection',
-    deleteConfirmTitle: 'Delete this clothing item?',
-    deleteConfirmBody: 'This item will be permanently removed from your wardrobe, saved outfits, and storage.',
-    deleteConfirmBtn: 'Yes, delete',
-    deletingBtn: 'Deleting...',
-    cancelBtn: 'Cancel',
-    itemDeletedToast: 'Clothing item deleted.',
-    slotLabels: {
-      top: 'Top',
-      bottom: 'Bottom',
-      outerwear: 'Outerwear',
-      shoes: 'Shoes',
-      accessory: 'Accessory',
-    },
-  },
-  ru: {
-    loading: 'Загрузка...',
-    loginSubtitle: 'Войдите для подбора образов по погоде из вашего гардероба.',
-    registerSubtitle: 'Создайте аккаунт и соберите свой гардероб.',
-    email: 'Эл. почта',
-    password: 'Пароль',
-    passwordHint: 'Минимум 6 символов',
-    signIn: 'Войти',
-    signUp: 'Регистрация',
-    pleaseWait: 'Подождите...',
-    haveAccount: 'Уже есть аккаунт? Войти',
-    noAccount: 'Нет аккаунта? Зарегистрироваться',
-    logout: 'Выйти',
-    tabToday: 'Погода и образ',
-    tabTravel: 'Город поездки',
-    liveWeatherTitle: 'Погода и умный образ',
-    gpsFinding: 'Определение по GPS...',
-    gpsFound: 'Определено по GPS',
-    gpsDenied: 'GPS отклонен (выберите город)',
-    gpsUnsupported: 'GPS не поддерживается (выбран город)',
-    citySelected: 'Выбрано вручную (GPS на паузе)',
-    citySearched: 'Найдено в поиске (GPS на паузе)',
-    travelPinned: 'Город поездки активен',
-    checkingWeather: 'Проверка погоды...',
-    chooseLocation: 'Выберите город',
-    feelsLike: 'Ощущается как',
-    dailyRange: 'За день',
-    wind: 'Ветер',
-    kmh: 'км/ч',
-    gpsBtn: 'Найти по GPS',
-    searchCityPlaceholder: 'Поиск города мира (напр. Токио, Париж)...',
-    searchBtn: 'Найти',
-    searching: 'Поиск...',
-    cityNotFound: 'Город не найден, попробуйте другое название.',
-    weatherFetchError: 'Не удалось загрузить данные о погоде. Попробуйте еще раз.',
-    weeklyForecastError: 'Не удалось загрузить прогноз на неделю. Попробуйте еще раз.',
-    geocodingError: 'Ошибка при поиске города. Попробуйте еще раз.',
-    demoMode: 'Режим погоды (Демо):',
-    generalAdviceTitle: 'Общий совет по одежде:',
-    todayOutfitTitle: 'Образ на сегодня из гардероба',
-    whyOutfit: 'Почему этот образ:',
-    defaultOutfitSub: 'Подобрано с учетом температуры, дождя и ветра',
-    allStyles: 'Все стили',
-    generateAnother: 'Другой образ',
-    saveOutfit: 'Сохранить',
-    savedToast: 'Образ добавлен в «Избранные образы»!',
-    loadedToast: 'Сохраненный образ загружен.',
-    travelTitle: 'Поездка и сбор чемодана',
-    travelSubtitle:
-      'Укажите город, дату начала и длительность поездки (1–14 дней) — подберем вещи из гардероба по прогнозу до 16 дней.',
-    travelInputPlaceholder: 'Введите город (напр. Лондон, Дубай, Рим)...',
-    travelStartDateLabel: 'Дата начала',
-    travelDaysLabel: 'Длительность (1–14 дн.)',
-    travelNotePlaceholder: 'Заметка (напр. командировка, прогулки)',
-    travelSaveBtn: 'Сохранить и собрать чемодан',
-    travelSavedListTitle: 'Сохраненные города поездок',
-    useCityBtn: 'Выбрать',
-    removeCityBtn: 'Удалить',
-    travelEmptyMsg: 'Пока нет сохраненных городов поездки. Добавьте город выше.',
-    weeklyForecastTitle: 'Прогноз погоды на поездку',
-    forecastDaysIncluded: 'Учтенные дни прогноза',
-    forecastPartialNote: 'Примечание: Open-Meteo предоставляет прогноз максимум на 16 дней; более поздние дни не охвачены.',
-    forecastOutOfRange: 'Выбранные даты выходят за пределы 16-дневного прогноза.',
-    suitcaseTitle: 'Рекомендуемые вещи в чемодан (из гардероба)',
-    suitcaseSummary: 'дн. поездка • по прогнозу поездки',
-    rainyWeekNote: 'Во время поездки ожидаются осадки — учтены влагозащитные вещи.',
-    coldWeekNote: 'Ожидаются прохладные/холодные дни — добавлена верхняя одежда.',
-    warmWeekNote: 'Ожидается теплая погода — выбраны более легкие вещи.',
-    emptySuitcaseMsg: 'Сначала добавьте вещи в гардероб для подбора чемодана.',
-    daysUnit: 'дн.',
-    emptyWardrobeOutfit:
-      'В гардеробе пока нет вещей. Добавьте верх, низ и обувь ниже для умного подбора!',
-    locked: 'Закреплено',
-    lock: 'Закрепить',
-    swap: 'Заменить',
-    notFoundInSlot: 'Нет вещи в этой категории',
-    warmthShort: 'Тепло',
-    totalItems: 'Всего вещей',
-    avgWarmth: 'Среднее тепло',
-    waterproofCount: 'Влагозащита',
-    piecesUnit: 'шт.',
-    savedOutfitsTitle: 'Избранные образы',
-    loadBtn: 'Загрузить',
-    deleteBtn: 'Удалить',
-    addNewItemTitle: 'Добавить вещь',
-    photoLabel: 'Фото вещи *',
-    photoRequired: 'Пожалуйста, выберите фото вещи.',
-    photoInvalidType: 'Допускаются только изображения (JPEG, PNG, WebP, GIF).',
-    photoTooLarge: 'Размер изображения не должен превышать 5 МБ.',
-    chooseFileBtn: 'Выберите файл',
-    noFileChosen: 'Файл не выбран',
-    previewReady: 'Фото выбрано',
-    categoryLabel: 'Категория *',
-    subCategoryLabel: 'Подкатегория (напр. Худи, Джинсы)',
-    subCategoryPlaceholder: 'Например: Оверсайз худи',
-    colorLabel: 'Цвет',
-    colorPlaceholder: 'Например: Черный, Бежевый, Синий',
-    styleLabel: 'Стиль',
-    warmthSlider: 'Уровень тепла (1 = тонкое, 5 = очень теплое)',
-    waterproofCheck: 'Водонепроницаемое (от дождя)',
-    windproofCheck: 'Ветрозащитное',
-    addToWardrobeBtn: 'Добавить в гардероб',
-    uploadingBtn: 'Загрузка...',
-    addedToast: 'Вещь добавлена в гардероб!',
-    myItemsTitle: 'Мои вещи',
-    allFilter: 'Все',
-    loadingWardrobe: 'Загрузка гардероба...',
-    emptyCategoryMsg: 'В этой категории пока пусто. Добавьте первую вещь выше!',
-    waterproofBadge: 'Влагозащита',
-    windproofBadge: 'Ветрозащита',
-    auto: 'Авто',
-    light: 'Светлая',
-    dark: 'Темная',
-    closeNotification: 'Закрыть уведомление',
-    locationModeLabels: {
-      gps: 'GPS',
-      manual: 'Вручную',
-      search: 'Поиск',
-      travel: 'Поездка',
-    },
-    signUpSuccess: 'Регистрация завершена! Проверьте эл. почту для подтверждения аккаунта.',
-    genericError: 'Произошла ошибка.',
-    weatherFetchError: 'Произошла ошибка при получении данных о погоде.',
-    previewAlt: 'Предпросмотр выбранного фото',
-    gpsLocationPrefix: 'GPS точка',
-    demoSuffix: '(Демо)',
-    wardrobeBalanced: 'Гардероб сбалансирован по основным категориям.',
-    wardrobeMissingPrefix: 'Не хватает категорий для полного образа',
-    wardrobeWaterproofTip: 'Добавьте хотя бы 1 влагозащитную вещь для дождливых дней.',
-    weatherConditions: {
-      snow: 'Снежно',
-      rain: 'Дождливо',
-      fog: 'Туман',
-      clear: 'Ясно и солнечно',
-      clouds: 'Переменная облачность',
-      default: 'Ясно / Облачно',
-    },
-    weatherTips: {
-      veryCold: 'Очень холодно: выберите теплый пуховик/пальто, свитер и закрытую обувь.',
-      chilly: 'Прохладно: лучше всего подойдет многослойность (худи/рубашка + куртка).',
-      mild: 'Умеренная погода: хватит легкого верха и тонкой куртки или жакета.',
-      warm: 'Тепло и комфортно: подойдут дышащие ткани и удобные брюки.',
-      hot: 'Очень жарко: выбирайте светлые оттенки и тонкие ткани (тепло 1–2).',
-      precipitation: 'Осадки: возьмите влагозащитную верхнюю одежду и обувь.',
-      strongWind: 'Сильный ветер ({wind} км/ч): наденьте ветрозащитный слой.',
-      eveningDrop: 'Вечером температура опустится до {minTemp}°C — стоит взять верхнюю одежду.',
-      rainChance: 'Вероятность осадков за день {rainProb}% — пригодится влагозащита.',
-    },
-    outfitReasons: {
-      targetedWarmth: 'учтен уровень тепла ({warmth}/5) для {temp}°C',
-      waterproof: 'добавлена влагозащита',
-      windproof: 'добавлена ветрозащита',
-      colorHarmony: 'сочетание цветов {colors}',
-    },
-    languageGroupLabel: 'Выбор языка',
-    themeGroupLabel: 'Выбор темы',
-    deleteConfirmTitle: 'Удалить эту вещь?',
-    deleteConfirmBody: 'Вещь будет навсегда удалена из гардероба, сохраненных образов и хранилища.',
-    deleteConfirmBtn: 'Да, удалить',
-    deletingBtn: 'Удаление...',
-    cancelBtn: 'Отмена',
-    itemDeletedToast: 'Вещь удалена из гардероба.',
-    slotLabels: {
-      top: 'Верх',
-      bottom: 'Низ',
-      outerwear: 'Верхняя одежда',
-      shoes: 'Обувь',
-      accessory: 'Аксессуар',
-    },
-  },
-};
-
-function subscribeToSystemDark(callback) {
+function subscribePrefs(callback) {
   if (typeof window === 'undefined') return () => {};
-  const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-  mediaQuery.addEventListener('change', callback);
-  return () => mediaQuery.removeEventListener('change', callback);
+  window.addEventListener('storage', callback);
+  window.addEventListener(PREFS_EVENT, callback);
+  return () => {
+    window.removeEventListener('storage', callback);
+    window.removeEventListener(PREFS_EVENT, callback);
+  };
+}
+
+function getThemeSnapshot() {
+  if (typeof window === 'undefined') return 'auto';
+  try {
+    const saved = localStorage.getItem('geyin_theme_mode');
+    if (saved === 'light' || saved === 'dark' || saved === 'auto') return saved;
+  } catch {
+    // ignore
+  }
+  return 'auto';
+}
+
+function getLangSnapshot() {
+  if (typeof window === 'undefined') return 'az';
+  try {
+    const saved = localStorage.getItem('geyin_lang');
+    if (saved === 'az' || saved === 'en' || saved === 'ru') return saved;
+  } catch {
+    // ignore
+  }
+  return 'az';
+}
+
+function emitPrefsChange() {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event(PREFS_EVENT));
+  }
+}
+
+function subscribeSystemTheme(callback) {
+  if (typeof window === 'undefined') return () => {};
+  const mq = window.matchMedia('(prefers-color-scheme: dark)');
+  mq.addEventListener('change', callback);
+  return () => mq.removeEventListener('change', callback);
 }
 
 function getSystemDarkSnapshot() {
@@ -635,108 +94,81 @@ function getSystemDarkSnapshot() {
   return window.matchMedia('(prefers-color-scheme: dark)').matches;
 }
 
-function getSystemDarkServerSnapshot() {
-  return false;
+function getLocalIsoDate(offsetDays = 0) {
+  const now = new Date();
+  const d = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate() + offsetDays));
+  return d.toISOString().slice(0, 10);
 }
 
-const SAVED_DATE_LOCALES = {
-  az: 'az-AZ',
-  en: 'en-US',
-  ru: 'ru-RU',
-};
-
-function formatSavedOutfitDate(value, lang = 'az') {
-  if (!value) return '';
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return String(value);
-  }
-  try {
-    const locale = SAVED_DATE_LOCALES[lang] || 'az-AZ';
-    return new Intl.DateTimeFormat(locale, {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    }).format(parsed);
-  } catch {
-    return String(value);
-  }
+function addIsoDays(isoDate, deltaDays) {
+  if (!isoDate || typeof isoDate !== 'string') return getLocalIsoDate(deltaDays);
+  const [y, m, d] = isoDate.split('-').map(Number);
+  if (!y || !m || !d) return getLocalIsoDate(deltaDays);
+  return new Date(Date.UTC(y, m - 1, d + deltaDays)).toISOString().slice(0, 10);
 }
 
-function findWorldCityMatch(name, lat, lon) {
-  const normalized = (name || '').trim().toLowerCase();
-  if (normalized) {
-    const byName = WORLD_CITIES.find(
-      (c) =>
-        c.name.toLowerCase() === normalized ||
-        (c.nameByLang &&
-          Object.values(c.nameByLang).some((v) => v.toLowerCase() === normalized))
-    );
-    if (byName) return byName;
-  }
-  if (typeof lat === 'number' && typeof lon === 'number') {
-    let nearest = null;
-    let minDist = Infinity;
-    for (const city of WORLD_CITIES) {
-      const d = Math.hypot(city.lat - lat, city.lon - lon);
-      if (d < minDist) {
-        minDist = d;
-        nearest = city;
-      }
-    }
-    if (nearest && minDist < 0.35) return nearest;
-  }
-  return null;
+function clampTravelDays(val) {
+  const parsed = Number.parseInt(val, 10);
+  if (Number.isNaN(parsed)) return 1;
+  return Math.max(1, Math.min(MAX_TRAVEL_DAYS, parsed));
 }
 
+export default function Home() {
+  const themeMode = useSyncExternalStore(subscribePrefs, getThemeSnapshot, () => 'auto');
+  const lang = useSyncExternalStore(subscribePrefs, getLangSnapshot, () => 'az');
+  const systemPrefersDark = useSyncExternalStore(subscribeSystemTheme, getSystemDarkSnapshot, () => false);
 
-export default function HomePage() {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [isRegister, setIsRegister] = useState(false);
-
-  // Active tab: 'today' | 'travel'
-  const [activeTab, setActiveTab] = useState('today');
-
-  // Language state: 'az' | 'en' | 'ru'
-  const [lang, setLang] = useState('az');
-  const tx = UI_TEXT[lang] || UI_TEXT.az;
-  const txRef = useRef(tx);
-
-  useEffect(() => {
-    txRef.current = tx;
-  }, [tx]);
+  const isDark = themeMode === 'dark' || (themeMode === 'auto' && systemPrefersDark);
+  const tx = useMemo(() => getText(lang), [lang]);
 
   useEffect(() => {
     if (typeof document !== 'undefined') {
       document.documentElement.lang = lang;
+      if (isDark) {
+        document.documentElement.setAttribute('data-theme', 'dark');
+      } else {
+        document.documentElement.removeAttribute('data-theme');
+      }
     }
-  }, [lang]);
-
-  // Theme state: 'auto' | 'light' | 'dark'
-  const [themeMode, setThemeMode] = useState('auto');
-  const systemPrefersDark = useSyncExternalStore(
-    subscribeToSystemDark,
-    getSystemDarkSnapshot,
-    getSystemDarkServerSnapshot
-  );
+  }, [lang, isDark]);
 
   // Auth state
+  const [user, setUser] = useState(null);
+  const [authChecked, setAuthChecked] = useState(false);
+  const [isRegister, setIsRegister] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  // Wardrobe state
+  // Tab & Weather state
+  const [activeTab, setActiveTab] = useState('today');
+  const [locationMode, setLocationMode] = useState('gps');
+  const [selectedCity, setSelectedCity] = useState('Bakı');
+  const [customCityOption, setCustomCityOption] = useState(null);
+  const [citySearchQuery, setCitySearchQuery] = useState('');
+  const [searchingCity, setSearchingCity] = useState(false);
+  const [locationSourceState, setLocationSourceState] = useState({ key: 'gpsFinding', detail: '' });
+  const locationSource = locationSourceState.detail
+    ? `${tx[locationSourceState.key] || ''}: ${locationSourceState.detail}`
+    : tx[locationSourceState.key] || '';
+
+  const [liveRawWeather, setLiveRawWeather] = useState(null);
+  const [demoPresetId, setDemoPresetId] = useState('live');
+  const [loadingWeather, setLoadingWeather] = useState(false);
+
+  // Wardrobe & Outfit state
   const [items, setItems] = useState([]);
   const [loadingItems, setLoadingItems] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [pendingDeleteItem, setPendingDeleteItem] = useState(null);
-  const [deletingItemId, setDeletingItemId] = useState(null);
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('Hamısı');
+  const [outfitStyleFilter, setOutfitStyleFilter] = useState('all');
+  const [recommendedOutfit, setRecommendedOutfit] = useState(null);
+  const [outfitAnimKey, setOutfitAnimKey] = useState(0);
+  const [lockedSlots, setLockedSlots] = useState({});
+  const [savedOutfits, setSavedOutfits] = useState([]);
 
-  // Form state for new item
+  // Wardrobe Form state
   const [imageFile, setImageFile] = useState(null);
   const [imagePreviewUrl, setImagePreviewUrl] = useState('');
   const [category, setCategory] = useState(CATEGORIES[0].value);
@@ -746,27 +178,14 @@ export default function HomePage() {
   const [waterproof, setWaterproof] = useState(false);
   const [windproof, setWindproof] = useState(false);
   const [style, setStyle] = useState('gundelik');
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef(null);
 
-  // Location & Weather state
-  const [locationMode, setLocationMode] = useState('gps');
-  const [selectedCity, setSelectedCity] = useState('Bakı');
-  const [customCityOption, setCustomCityOption] = useState(null);
-  const [citySearchQuery, setCitySearchQuery] = useState('');
-  const [searchingCity, setSearchingCity] = useState(false);
-  const [locationSourceState, setLocationSourceState] = useState({ key: 'gpsFinding', detail: '' });
-  const locationSource = locationSourceState.detail
-    ? `${tx[locationSourceState.key]}: ${locationSourceState.detail}`
-    : tx[locationSourceState.key];
-  const [liveRawWeather, setLiveRawWeather] = useState(null);
-  const [demoPresetId, setDemoPresetId] = useState('live');
-  const [loadingWeather, setLoadingWeather] = useState(false);
-  const [outfitStyleFilter, setOutfitStyleFilter] = useState('all');
-  const [recommendedOutfit, setRecommendedOutfit] = useState(null);
-  const [outfitAnimKey, setOutfitAnimKey] = useState(0);
-  const [lockedSlots, setLockedSlots] = useState({});
-  const [savedOutfits, setSavedOutfits] = useState([]);
+  // Delete modal state
+  const [pendingDeleteItem, setPendingDeleteItem] = useState(null);
+  const [deletingItemId, setDeletingItemId] = useState(null);
 
-  // Travel / forecast & suitcase state
+  // Travel state
   const [travelCityInput, setTravelCityInput] = useState('');
   const [travelStartDateInput, setTravelStartDateInput] = useState(() => getLocalIsoDate(0));
   const [travelDaysInput, setTravelDaysInput] = useState(4);
@@ -797,34 +216,7 @@ export default function HomePage() {
     };
   }, []);
 
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    try {
-      const savedTheme = localStorage.getItem('geyin_theme_mode');
-      if (savedTheme === 'light' || savedTheme === 'dark' || savedTheme === 'auto') {
-        queueMicrotask(() => setThemeMode(savedTheme));
-      }
-      const savedLang = localStorage.getItem('geyin_lang');
-      if (savedLang === 'az' || savedLang === 'en' || savedLang === 'ru') {
-        queueMicrotask(() => setLang(savedLang));
-      }
-    } catch {
-      // ignore
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!message) return;
-    const timer = setTimeout(() => setMessage(''), 4500);
-    return () => clearTimeout(timer);
-  }, [message]);
-
-  useEffect(() => {
-    if (!error) return;
-    const timer = setTimeout(() => setError(''), 6000);
-    return () => clearTimeout(timer);
-  }, [error]);
-
+  // Escape key for delete modal
   useEffect(() => {
     if (!pendingDeleteItem) return;
     const handleKeyDown = (e) => {
@@ -836,40 +228,282 @@ export default function HomePage() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [pendingDeleteItem, deletingItemId]);
 
-  const fetchWeeklyForecast = useCallback(async (lat, lon, startDate, daysCount) => {
-    weeklyAbortRef.current?.abort();
-    const controller = new AbortController();
-    weeklyAbortRef.current = controller;
+  // Image preview cleanup
+  useEffect(() => {
+    if (!imageFile) {
+      queueMicrotask(() => setImagePreviewUrl(''));
+      return;
+    }
+    const url = URL.createObjectURL(imageFile);
+    queueMicrotask(() => setImagePreviewUrl(url));
+    return () => URL.revokeObjectURL(url);
+  }, [imageFile]);
 
-    setLoadingWeekly(true);
-    setWeeklyForecastError('');
-    setWeeklyForecast([]);
+  // Auto-dismiss notification
+  useEffect(() => {
+    if (!message) return;
+    const timer = setTimeout(() => setMessage(''), 4500);
+    return () => clearTimeout(timer);
+  }, [message]);
+
+  const getSavedOutfitsKey = useCallback((uId) => `geyin_saved_${uId || 'guest'}`, []);
+  const getTravelCitiesKey = useCallback((uId) => `geyin_travel_${uId || 'guest'}`, []);
+  const getManualLocationKey = useCallback((uId) => `geyin_manual_${uId || 'guest'}`, []);
+
+  // Auth state listener
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+      setAuthChecked(true);
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+      setAuthChecked(true);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const handleSelectLang = (newLang) => {
     try {
-      const allDays = await fetchDailyForecast(lat, lon, {
-        days: MAX_OPEN_METEO_DAYS,
-        signal: controller.signal,
-      });
-      if (weeklyAbortRef.current !== controller) return;
+      localStorage.setItem('geyin_lang', newLang);
+      emitPrefsChange();
+    } catch {
+      // ignore
+    }
+  };
 
-      const effectiveStart = startDate || getLocalIsoDate(0);
-      const tripDays = clampTravelDays(daysCount);
-      const effectiveEnd = addIsoDays(effectiveStart, tripDays - 1);
-      const filtered = allDays.filter(
-        (day) => day.date >= effectiveStart && day.date <= effectiveEnd
-      );
-      setWeeklyForecast(filtered);
+  const handleSelectTheme = (mode) => {
+    try {
+      localStorage.setItem('geyin_theme_mode', mode);
+      emitPrefsChange();
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleAuthSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    setMessage('');
+    setSubmitting(true);
+    try {
+      if (isRegister) {
+        const { error: signUpErr } = await supabase.auth.signUp({ email, password });
+        if (signUpErr) throw signUpErr;
+        setMessage(tx.signUpSuccess);
+      } else {
+        const { error: signInErr } = await supabase.auth.signInWithPassword({ email, password });
+        if (signInErr) throw signInErr;
+      }
     } catch (err) {
-      if (isAbortError(err) || weeklyAbortRef.current !== controller) return;
-      const errMsg = txRef.current.weeklyForecastError;
-      setWeeklyForecast([]);
-      setWeeklyForecastError(errMsg);
-      setError(errMsg);
+      setError(err?.message || tx.genericError);
     } finally {
-      if (weeklyAbortRef.current === controller) {
-        setLoadingWeekly(false);
+      setSubmitting(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await supabase.auth.signOut();
+    } catch {
+      // ignore
+    }
+    setUser(null);
+    setItems([]);
+    setSavedOutfits([]);
+    setTravelCities([]);
+    setActiveTravelPlan(null);
+    setWeeklyForecast([]);
+    setRecommendedOutfit(null);
+    setLockedSlots({});
+  };
+
+  // Weather fetching
+  const fetchWeatherForCoords = useCallback(
+    async (lat, lon, label, mode, detail = '') => {
+      weatherAbortRef.current?.abort();
+      const controller = new AbortController();
+      weatherAbortRef.current = controller;
+
+      setLoadingWeather(true);
+      setError('');
+      try {
+        const currentData = await fetchCurrentWeather(lat, lon, { signal: controller.signal });
+        if (weatherAbortRef.current !== controller) return;
+
+        let hourlyForecast = null;
+        try {
+          const dailyData = await fetchDailyForecast(lat, lon, { days: 2, signal: controller.signal });
+          if (dailyData?.length > 0) {
+            hourlyForecast = {
+              minTemp: dailyData[0].minTemp,
+              maxTemp: dailyData[0].maxTemp,
+              rainProb: dailyData[0].rainProb,
+            };
+          }
+        } catch {
+          // non-critical
+        }
+
+        setLiveRawWeather({
+          locationName: label,
+          temp: currentData.temp,
+          apparent: currentData.apparent,
+          code: currentData.code,
+          wind: currentData.wind,
+          hourlyForecast,
+        });
+        setLocationMode(mode);
+        setLocationSourceState({
+          key: mode === 'gps' ? 'gpsFound' : mode === 'search' ? 'citySearched' : 'citySelected',
+          detail: detail || label,
+        });
+      } catch (err) {
+        if (isAbortError(err) || weatherAbortRef.current !== controller) return;
+        setError(tx.weatherFetchError);
+      } finally {
+        if (weatherAbortRef.current === controller) {
+          setLoadingWeather(false);
+        }
+      }
+    },
+    [tx]
+  );
+
+  const detectGpsLocation = useCallback(() => {
+    if (!navigator.geolocation) {
+      const city = WORLD_CITIES[0];
+      fetchWeatherForCoords(city.lat, city.lon, city.name, 'manual');
+      return;
+    }
+    setLocationSourceState({ key: 'gpsFinding', detail: '' });
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude, longitude } = pos.coords;
+        const nearestName = findNearestCity(latitude, longitude, lang);
+        fetchWeatherForCoords(latitude, longitude, nearestName, 'gps');
+      },
+      () => {
+        const city = WORLD_CITIES[0];
+        fetchWeatherForCoords(city.lat, city.lon, city.name, 'manual');
+      },
+      { timeout: 10000 }
+    );
+  }, [fetchWeatherForCoords, lang]);
+
+  const handleCitySelect = (cityName) => {
+    setSelectedCity(cityName);
+    const matched =
+      (customCityOption && customCityOption.value === cityName ? customCityOption.city : null) ||
+      WORLD_CITIES.find((c) => c.name === cityName);
+    if (!matched) return;
+    const label = matched.nameByLang ? matched.nameByLang[lang] || matched.name : matched.name;
+    fetchWeatherForCoords(matched.lat, matched.lon, label, 'manual');
+    if (user) {
+      try {
+        localStorage.setItem(getManualLocationKey(user.id), JSON.stringify(matched));
+      } catch {
+        // ignore
       }
     }
-  }, []);
+  };
+
+  const handleWorldCitySearch = async (e) => {
+    e.preventDefault();
+    const query = citySearchQuery.trim();
+    if (!query) return;
+
+    geoSearchAbortRef.current?.abort();
+    const controller = new AbortController();
+    geoSearchAbortRef.current = controller;
+
+    setSearchingCity(true);
+    setError('');
+    try {
+      const localMatch = findWorldCityMatch(query, lang);
+      if (localMatch) {
+        setCustomCityOption({
+          value: localMatch.name,
+          label: `${localMatch.nameByLang ? localMatch.nameByLang[lang] || localMatch.name : localMatch.name} (${localMatch.code})`,
+          city: localMatch,
+        });
+        setSelectedCity(localMatch.name);
+        fetchWeatherForCoords(localMatch.lat, localMatch.lon, localMatch.name, 'search', query);
+        setCitySearchQuery('');
+        return;
+      }
+
+      const results = await searchGeocodingCity(query, lang, { count: 1, signal: controller.signal });
+      if (geoSearchAbortRef.current !== controller) return;
+      if (!results || results.length === 0) {
+        setError(tx.cityNotFound);
+        return;
+      }
+      const top = results[0];
+      const opt = {
+        value: top.name,
+        label: `${top.name} (${top.country})`,
+        city: {
+          name: top.name,
+          code: top.countryCode,
+          lat: top.latitude,
+          lon: top.longitude,
+          nameByLang: { [lang]: top.name },
+        },
+      };
+      setCustomCityOption(opt);
+      setSelectedCity(top.name);
+      fetchWeatherForCoords(top.latitude, top.longitude, top.name, 'search', query);
+      setCitySearchQuery('');
+    } catch (err) {
+      if (isAbortError(err) || geoSearchAbortRef.current !== controller) return;
+      setError(tx.geocodingError);
+    } finally {
+      if (geoSearchAbortRef.current === controller) {
+        setSearchingCity(false);
+      }
+    }
+  };
+
+  // Weekly travel forecast
+  const fetchWeeklyForecast = useCallback(
+    async (lat, lon, startDate, daysCount) => {
+      weeklyAbortRef.current?.abort();
+      const controller = new AbortController();
+      weeklyAbortRef.current = controller;
+
+      setLoadingWeekly(true);
+      setWeeklyForecastError('');
+      setWeeklyForecast([]);
+      try {
+        const allDays = await fetchDailyForecast(lat, lon, {
+          days: MAX_OPEN_METEO_DAYS,
+          signal: controller.signal,
+        });
+        if (weeklyAbortRef.current !== controller) return;
+
+        const effectiveStart = startDate || getLocalIsoDate(0);
+        const tripDays = clampTravelDays(daysCount);
+        const effectiveEnd = addIsoDays(effectiveStart, tripDays - 1);
+        const filtered = allDays.filter(
+          (day) => day.date >= effectiveStart && day.date <= effectiveEnd
+        );
+        setWeeklyForecast(filtered);
+      } catch (err) {
+        if (isAbortError(err) || weeklyAbortRef.current !== controller) return;
+        setWeeklyForecastError(tx.weeklyForecastError);
+      } finally {
+        if (weeklyAbortRef.current === controller) {
+          setLoadingWeekly(false);
+        }
+      }
+    },
+    [tx]
+  );
 
   useEffect(() => {
     if (activeTravelPlan?.lat && activeTravelPlan?.lon) {
@@ -884,305 +518,315 @@ export default function HomePage() {
     }
   }, [activeTravelPlan, fetchWeeklyForecast]);
 
-  const suitcasePlan = useMemo(
-    () => buildSuitcasePlan(items, weeklyForecast, activeTravelPlan?.days || travelDaysInput, lang),
-    [items, weeklyForecast, activeTravelPlan, travelDaysInput, lang]
+  const activeWeather = useMemo(
+    () => resolveActiveWeather(demoPresetId, liveRawWeather, selectedCity, lang),
+    [demoPresetId, liveRawWeather, selectedCity, lang]
   );
 
-  const handleSelectTheme = (mode) => {
-    setThemeMode(mode);
+  // Initial location load
+  useEffect(() => {
+    if (!authChecked) return;
+    queueMicrotask(() => detectGpsLocation());
+  }, [authChecked, detectGpsLocation]);
+
+  // Load wardrobe items
+  const loadWardrobeItems = useCallback(async () => {
+    if (!user) return;
+    setLoadingItems(true);
     try {
-      localStorage.setItem('geyin_theme_mode', mode);
+      const { data, error: fetchErr } = await supabase
+        .from('wardrobe_items')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+      if (fetchErr) throw fetchErr;
+      const resolved = await resolveWardrobeItemUrls(supabase, data || []);
+      setItems(resolved);
     } catch {
-      // ignore
+      // non-critical error display
+    } finally {
+      setLoadingItems(false);
     }
-  };
-
-  const handleSelectLang = (nextLang) => {
-    setLang(nextLang);
-    try {
-      localStorage.setItem('geyin_lang', nextLang);
-    } catch {
-      // ignore
-    }
-  };
-
-  const isDark = themeMode === 'dark' || (themeMode === 'auto' && systemPrefersDark);
-
-  const getCategoryLabel = (catValue) => {
-    const rawVal = typeof catValue === 'string' ? catValue : catValue?.value;
-    const found = CATEGORIES.find((c) => c.value === rawVal);
-    if (!found) return rawVal || '';
-    return found.label[lang] || found.label.az;
-  };
+  }, [user]);
 
   useEffect(() => {
-    if (!imageFile) {
-      queueMicrotask(() => setImagePreviewUrl(''));
-      return;
-    }
-    const url = URL.createObjectURL(imageFile);
-    queueMicrotask(() => setImagePreviewUrl(url));
-    return () => URL.revokeObjectURL(url);
-  }, [imageFile]);
+    if (!user) return;
+    queueMicrotask(() => loadWardrobeItems());
+  }, [user, loadWardrobeItems]);
 
-  const outfitWeatherCore = useMemo(() => {
-    if (demoPresetId === 'live') {
-      if (!liveRawWeather) return null;
-      const info = interpretWeather(
-        liveRawWeather.code,
-        liveRawWeather.temp,
-        liveRawWeather.wind,
-        liveRawWeather.hourlyForecast
-      );
-      return {
-        temp: liveRawWeather.temp,
-        idealWarmth: info.idealWarmth,
-        isRainy: info.isRainy,
-        isWindy: info.isWindy,
-        needOuterwear: info.needOuterwear,
-      };
-    }
+  // Periodic signed URL refresh
+  useEffect(() => {
+    if (!user || items.length === 0) return;
+    const interval = setInterval(async () => {
+      const refreshed = await resolveWardrobeItemUrls(supabase, items);
+      setItems(refreshed);
+    }, (SIGNED_URL_TTL_SECONDS - 60) * 1000);
+    return () => clearInterval(interval);
+  }, [user, items]);
 
-    const preset = DEMO_PRESETS.find((p) => p.id === demoPresetId);
-    if (!preset) return null;
-    const info = interpretWeather(preset.code, preset.temp, preset.wind, {
-      minTemp: preset.minTemp,
-      maxTemp: preset.maxTemp,
-      rainProb: preset.rainProb,
-    });
-    return {
-      temp: preset.temp,
-      idealWarmth: info.idealWarmth,
-      isRainy: info.isRainy,
-      isWindy: info.isWindy,
-      needOuterwear: info.needOuterwear,
-    };
-  }, [demoPresetId, liveRawWeather]);
-
-  const activeWeather = useMemo(() => {
-    if (demoPresetId === 'live') {
-      if (!liveRawWeather) return null;
-      const info = interpretWeather(
-        liveRawWeather.code,
-        liveRawWeather.temp,
-        liveRawWeather.wind,
-        liveRawWeather.hourlyForecast,
-        lang
-      );
-      return {
-        locationName: liveRawWeather.locationName,
-        temp: liveRawWeather.temp,
-        apparent: liveRawWeather.apparent,
-        wind: liveRawWeather.wind,
-        ...info,
-      };
-    }
-
-    const preset = DEMO_PRESETS.find((p) => p.id === demoPresetId);
-    if (!preset) return null;
-    const info = interpretWeather(
-      preset.code,
-      preset.temp,
-      preset.wind,
-      {
-        minTemp: preset.minTemp,
-        maxTemp: preset.maxTemp,
-        rainProb: preset.rainProb,
-      },
-      lang
-    );
-    return {
-      locationName: `${liveRawWeather?.locationName || selectedCity} ${tx.demoSuffix}`,
-      temp: preset.temp,
-      apparent: preset.apparent,
-      wind: preset.wind,
-      ...info,
-    };
-  }, [demoPresetId, liveRawWeather, selectedCity, lang, tx.demoSuffix]);
-
-  const wardrobeInsights = useMemo(() => {
-    if (!items || items.length === 0) return null;
-    const avgWarmth = (
-      items.reduce((acc, i) => acc + (Number(i.warmth_level) || 3), 0) / items.length
-    ).toFixed(1);
-
-    const hasWaterproof = items.some((i) => i.waterproof);
-    const missingCategories = CATEGORIES.filter(
-      (cat) => cat.value !== 'Aksesuar' && !items.some((i) => i.category === cat.value)
-    ).map((cat) => cat.label[lang] || cat.label.az);
-
-    let suggestion = tx.wardrobeBalanced;
-
-    if (missingCategories.length > 0) {
-      suggestion = `${tx.wardrobeMissingPrefix}: ${missingCategories.join(', ')}.`;
-    } else if (!hasWaterproof) {
-      suggestion = tx.wardrobeWaterproofTip;
-    }
-
-    return {
-      total: items.length,
-      avgWarmth,
-      waterproofCount: items.filter((i) => i.waterproof).length,
-      suggestion,
-    };
-  }, [items, lang, tx]);
-
-  const fetchWeatherByCoords = useCallback(async (lat, lon, label) => {
-    weatherAbortRef.current?.abort();
-    const controller = new AbortController();
-    weatherAbortRef.current = controller;
-
-    setLoadingWeather(true);
-    setError('');
+  // Load user saved outfits & travel cities
+  useEffect(() => {
+    if (!user) return;
     try {
-      const weatherData = await fetchCurrentWeather(lat, lon, {
-        signal: controller.signal,
-      });
-      if (weatherAbortRef.current !== controller) return;
-      setLiveRawWeather({
-        locationName: label,
-        ...weatherData,
-      });
-    } catch (err) {
-      if (isAbortError(err) || weatherAbortRef.current !== controller) return;
-      setLiveRawWeather(null);
-      setError(txRef.current.weatherFetchError);
-    } finally {
-      if (weatherAbortRef.current === controller) {
-        setLoadingWeather(false);
+      const savedOutfitsRaw = localStorage.getItem(getSavedOutfitsKey(user.id));
+      if (savedOutfitsRaw) {
+        const parsed = JSON.parse(savedOutfitsRaw);
+        const pieces = parsed.flatMap((s) => s.pieces || []);
+        resolveWardrobeItemUrls(supabase, pieces).then(() => {
+          queueMicrotask(() => setSavedOutfits(parsed));
+        });
       }
-    }
-  }, []);
-
-  const syncLocationControl = useCallback((cityName, lat, lon, displayLabel) => {
-    const matched = findWorldCityMatch(cityName, lat, lon);
-    if (matched) {
-      setCustomCityOption(null);
-      setSelectedCity(matched.name);
-    } else {
-      const label = displayLabel || cityName || '';
-      if (label) {
-        const customValue = `__custom__:${label}`;
-        setCustomCityOption({ value: customValue, label });
-        setSelectedCity(customValue);
+      const savedTravelRaw = localStorage.getItem(getTravelCitiesKey(user.id));
+      if (savedTravelRaw) {
+        const parsed = JSON.parse(savedTravelRaw);
+        queueMicrotask(() => setTravelCities(parsed));
       }
-    }
-  }, []);
-
-  const persistManualLocation = useCallback((cityValue, lat, lon, label, mode = 'manual') => {
-    setLocationMode(mode);
-    const uid = userIdRef.current;
-    if (!uid) return;
-    try {
-      localStorage.setItem(
-        getManualLocationKey(uid),
-        JSON.stringify({ city: cityValue, lat, lon, label, mode })
-      );
     } catch {
       // ignore
     }
-  }, []);
+  }, [user, getSavedOutfitsKey, getTravelCitiesKey]);
 
-  const detectGpsLocation = useCallback(() => {
-    setDemoPresetId('live');
-    setLocationMode('gps');
-    const uid = userIdRef.current;
-    if (uid) {
+  // Generate outfit when weather or style changes
+  useEffect(() => {
+    if (!activeWeather || items.length === 0) {
+      queueMicrotask(() => setRecommendedOutfit(null));
+      return;
+    }
+    const outfit = buildSmartOutfit(
+      items,
+      activeWeather,
+      outfitStyleFilter,
+      lockedSlots,
+      recommendedOutfit,
+      {},
+      lang
+    );
+    queueMicrotask(() => {
+      setRecommendedOutfit(outfit);
+      setOutfitAnimKey((prev) => prev + 1);
+    });
+  }, [activeWeather, items, outfitStyleFilter]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleRegenerateOutfit = () => {
+    if (!activeWeather || items.length === 0) return;
+    const outfit = buildSmartOutfit(
+      items,
+      activeWeather,
+      outfitStyleFilter,
+      lockedSlots,
+      recommendedOutfit,
+      {},
+      lang
+    );
+    setRecommendedOutfit(outfit);
+    setOutfitAnimKey((prev) => prev + 1);
+  };
+
+  const handleToggleLockSlot = (slotKey) => {
+    setLockedSlots((prev) => ({ ...prev, [slotKey]: !prev[slotKey] }));
+  };
+
+  const handleRegenerateSingleSlot = (slotKey) => {
+    if (!activeWeather || !recommendedOutfit || !recommendedOutfit[slotKey]) return;
+    const currentId = recommendedOutfit[slotKey]?.id;
+    const updated = buildSmartOutfit(
+      items,
+      activeWeather,
+      outfitStyleFilter,
+      { ...lockedSlots, [slotKey]: false },
+      recommendedOutfit,
+      { [slotKey]: currentId },
+      lang
+    );
+    if (updated) {
+      setRecommendedOutfit(updated);
+      setOutfitAnimKey((prev) => prev + 1);
+    }
+  };
+
+  const handleSaveCurrentOutfit = () => {
+    if (!recommendedOutfit || !user) return;
+    const pieces = [
+      recommendedOutfit.top,
+      recommendedOutfit.bottom,
+      recommendedOutfit.outerwear,
+      recommendedOutfit.shoes,
+      recommendedOutfit.accessory,
+    ].filter(Boolean);
+
+    const newSaved = {
+      id: `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      city: activeWeather?.locationName || selectedCity,
+      temp: activeWeather?.temp ?? 20,
+      condition: activeWeather?.conditionText || '',
+      createdAt: new Date().toISOString(),
+      outfitData: recommendedOutfit,
+      pieces,
+    };
+
+    const next = [newSaved, ...savedOutfits];
+    setSavedOutfits(next);
+    try {
+      localStorage.setItem(getSavedOutfitsKey(user.id), JSON.stringify(next));
+      setMessage(tx.savedToast);
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleLoadSavedOutfit = (saved) => {
+    if (!saved?.outfitData) return;
+    setRecommendedOutfit(saved.outfitData);
+    setOutfitAnimKey((prev) => prev + 1);
+    setMessage(tx.loadedToast);
+  };
+
+  const handleDeleteSavedOutfit = (savedId) => {
+    const next = savedOutfits.filter((s) => s.id !== savedId);
+    setSavedOutfits(next);
+    if (user) {
       try {
-        localStorage.removeItem(getManualLocationKey(uid));
+        localStorage.setItem(getSavedOutfitsKey(user.id), JSON.stringify(next));
       } catch {
         // ignore
       }
     }
+  };
 
-    if (typeof window === 'undefined' || !navigator.geolocation) {
-      setLocationSourceState({ key: 'gpsUnsupported', detail: '' });
-      const fallback = WORLD_CITIES[0];
-      setCustomCityOption(null);
-      setSelectedCity(fallback.name);
-      fetchWeatherByCoords(fallback.lat, fallback.lon, `${fallback.name} (${fallback.code})`);
+  // Add Item
+  const handleAddItem = async (e) => {
+    e.preventDefault();
+    if (!user) return;
+    if (!imageFile) {
+      setError(tx.photoRequired);
       return;
     }
 
-    setLocationSourceState({ key: 'gpsFinding', detail: '' });
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const { latitude, longitude } = pos.coords;
-        const nearestName = findNearestCity(latitude, longitude, lang);
-        syncLocationControl(nearestName, latitude, longitude, nearestName);
-        setLocationSourceState({ key: 'gpsFound', detail: '' });
-        fetchWeatherByCoords(latitude, longitude, nearestName);
-      },
-      () => {
-        setLocationSourceState({ key: 'gpsDenied', detail: '' });
-        const fallback =
-          WORLD_CITIES.find((c) => c.name === selectedCity) || WORLD_CITIES[0];
-        setCustomCityOption(null);
-        setSelectedCity(fallback.name);
-        fetchWeatherByCoords(fallback.lat, fallback.lon, `${fallback.name} (${fallback.code})`);
-      },
-      { timeout: 8000 }
-    );
-  }, [fetchWeatherByCoords, selectedCity, syncLocationControl, lang]);
-
-  const handleCitySelect = (cityName) => {
-    setDemoPresetId('live');
-    setCustomCityOption(null);
-    setSelectedCity(cityName);
-    const cityObj = WORLD_CITIES.find((c) => c.name === cityName);
-    if (cityObj) {
-      const displayCity = cityObj.nameByLang ? cityObj.nameByLang[lang] || cityObj.name : cityObj.name;
-      const fullLabel = `${displayCity} (${cityObj.code})`;
-      persistManualLocation(cityObj.name, cityObj.lat, cityObj.lon, fullLabel, 'manual');
-      setLocationSourceState({ key: 'citySelected', detail: '' });
-      fetchWeatherByCoords(cityObj.lat, cityObj.lon, fullLabel);
+    const validation = await validateImageFile(imageFile);
+    if (!validation.valid) {
+      if (validation.error === 'photoTooLarge') setError(tx.photoTooLarge);
+      else if (validation.error === 'photoInvalidType') setError(tx.photoInvalidType);
+      else setError(tx.photoRequired);
+      return;
     }
-  };
 
-  const handleWorldCitySearch = async (e) => {
-    e.preventDefault();
-    const q = citySearchQuery.trim();
-    if (!q) return;
-
-    geoSearchAbortRef.current?.abort();
-    const controller = new AbortController();
-    geoSearchAbortRef.current = controller;
-
-    setSearchingCity(true);
+    setUploading(true);
     setError('');
+    setMessage('');
     try {
-      const place = await searchGeocodingCity(q, lang, { signal: controller.signal });
-      if (geoSearchAbortRef.current !== controller) return;
-      if (!place) {
-        setError(tx.cityNotFound);
-        return;
-      }
-      const displayLabel = place.country_code
-        ? `${place.name} (${place.country_code})`
-        : place.country
-        ? `${place.name}, ${place.country}`
-        : place.name;
-      setDemoPresetId('live');
-      syncLocationControl(place.name, place.latitude, place.longitude, displayLabel);
-      persistManualLocation(place.name, place.latitude, place.longitude, displayLabel, 'search');
-      setLocationSourceState({ key: 'citySearched', detail: '' });
-      setCitySearchQuery('');
-      await fetchWeatherByCoords(place.latitude, place.longitude, displayLabel);
+      const storagePath = generateSafeStoragePath(user.id, validation.ext);
+      const { error: uploadErr } = await supabase.storage
+        .from(CLOTHES_BUCKET)
+        .upload(storagePath, imageFile, { contentType: imageFile.type });
+      if (uploadErr) throw uploadErr;
+
+      const { data: inserted, error: insertErr } = await supabase
+        .from('wardrobe_items')
+        .insert({
+          user_id: user.id,
+          category,
+          sub_category: subCategory.trim() || null,
+          color: color.trim() || null,
+          warmth_level: Number(warmthLevel),
+          waterproof: Boolean(waterproof),
+          windproof: Boolean(windproof),
+          style,
+          image_path: storagePath,
+          image_url: storagePath,
+        })
+        .select()
+        .single();
+      if (insertErr) throw insertErr;
+
+      const resolved = await resolveWardrobeItemUrls(supabase, [inserted]);
+      setItems((prev) => [resolved[0], ...prev]);
+      setImageFile(null);
+      setSubCategory('');
+      setColor('');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      setMessage(tx.addedToast);
     } catch (err) {
-      if (isAbortError(err) || geoSearchAbortRef.current !== controller) return;
-      setError(tx.geocodingError);
+      setError(err?.message || tx.genericError);
     } finally {
-      if (geoSearchAbortRef.current === controller) {
-        setSearchingCity(false);
-      }
+      setUploading(false);
     }
   };
 
+  // Delete Item modal handlers
+  const handleRequestDeleteItem = (item) => {
+    setPendingDeleteItem(item);
+  };
+
+  const handleCancelDeleteItem = () => {
+    if (!deletingItemId) {
+      setPendingDeleteItem(null);
+    }
+  };
+
+  const handleConfirmDeleteItem = async (item) => {
+    if (!user || !item) return;
+    setDeletingItemId(item.id);
+    try {
+      const { error: deleteDbErr } = await supabase
+        .from('wardrobe_items')
+        .delete()
+        .eq('id', item.id)
+        .eq('user_id', user.id);
+      if (deleteDbErr) throw deleteDbErr;
+
+      const storagePath = item.image_path || extractClothesStoragePath(item.image_url);
+      if (storagePath) {
+        await supabase.storage.from(CLOTHES_BUCKET).remove([storagePath]);
+      }
+
+      setItems((prev) => prev.filter((i) => i.id !== item.id));
+
+      // Cleanup saved outfits
+      setSavedOutfits((prev) => {
+        const cleaned = prev
+          .map((s) => ({
+            ...s,
+            pieces: s.pieces.filter((p) => p.id !== item.id),
+          }))
+          .filter((s) => s.pieces.length > 0);
+        try {
+          localStorage.setItem(getSavedOutfitsKey(user.id), JSON.stringify(cleaned));
+        } catch {
+          // ignore
+        }
+        return cleaned;
+      });
+
+      // Cleanup recommended outfit & locked slots
+      if (recommendedOutfit) {
+        const next = { ...recommendedOutfit };
+        let modified = false;
+        for (const slotKey of ['top', 'bottom', 'outerwear', 'shoes', 'accessory']) {
+          if (next[slotKey]?.id === item.id) {
+            next[slotKey] = null;
+            modified = true;
+            if (lockedSlots[slotKey]) {
+              setLockedSlots((l) => ({ ...l, [slotKey]: false }));
+            }
+          }
+        }
+        if (modified) setRecommendedOutfit(next);
+      }
+
+      setPendingDeleteItem(null);
+      setMessage(tx.itemDeletedToast);
+    } catch (err) {
+      setError(err?.message || tx.genericError);
+    } finally {
+      setDeletingItemId(null);
+    }
+  };
+
+  // Travel handlers
   const handleAddTravelCity = async (e) => {
     e.preventDefault();
-    const q = travelCityInput.trim();
-    if (!q) return;
+    const query = travelCityInput.trim();
+    if (!query) return;
 
     travelGeoAbortRef.current?.abort();
     const controller = new AbortController();
@@ -1190,53 +834,38 @@ export default function HomePage() {
 
     setSavingTravelCity(true);
     setError('');
-
     try {
-      const place = await searchGeocodingCity(q, lang, { signal: controller.signal });
+      const results = await searchGeocodingCity(query, lang, { count: 1, signal: controller.signal });
       if (travelGeoAbortRef.current !== controller) return;
-      if (!place) {
+      if (!results || results.length === 0) {
         setError(tx.cityNotFound);
         return;
       }
-
-      const label = place.country_code
-        ? `${place.name} (${place.country_code})`
-        : place.name;
-      const daysVal = clampTravelDays(travelDaysInput);
-      setTravelDaysInput(daysVal);
-      const startDateVal = travelStartDateInput || getLocalIsoDate(0);
-
-      const entry = {
-        id: Date.now(),
-        name: place.name,
-        code: place.country_code || '',
-        label,
-        startDate: startDateVal,
-        days: daysVal,
+      const top = results[0];
+      const plan = {
+        id: `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        name: top.name,
+        country: top.country,
+        label: `${top.name} (${top.country})`,
+        lat: top.latitude,
+        lon: top.longitude,
+        startDate: travelStartDateInput || getLocalIsoDate(0),
+        days: clampTravelDays(travelDaysInput),
         note: travelNoteInput.trim(),
-        lat: place.latitude,
-        lon: place.longitude,
       };
 
-      const nextList = [entry, ...travelCities.filter((c) => c.label !== label)].slice(0, 10);
-      setTravelCities(nextList);
-      setActiveTravelPlan(entry);
-      if (user?.id) {
+      const nextCities = [plan, ...travelCities.filter((c) => c.name !== plan.name)];
+      setTravelCities(nextCities);
+      setActiveTravelPlan(plan);
+      setTravelCityInput('');
+      setTravelNoteInput('');
+      if (user) {
         try {
-          localStorage.setItem(getTravelCitiesKey(user.id), JSON.stringify(nextList));
+          localStorage.setItem(getTravelCitiesKey(user.id), JSON.stringify(nextCities));
         } catch {
           // ignore
         }
       }
-
-      setDemoPresetId('live');
-      syncLocationControl(entry.name, entry.lat, entry.lon, entry.label);
-      persistManualLocation(entry.name, entry.lat, entry.lon, entry.label, 'travel');
-      setLocationSourceState({ key: 'travelPinned', detail: entry.label });
-      await fetchWeatherByCoords(entry.lat, entry.lon, entry.label);
-      await fetchWeeklyForecast(entry.lat, entry.lon, entry.startDate, entry.days);
-      setTravelCityInput('');
-      setTravelNoteInput('');
     } catch (err) {
       if (isAbortError(err) || travelGeoAbortRef.current !== controller) return;
       setError(tx.geocodingError);
@@ -1247,955 +876,163 @@ export default function HomePage() {
     }
   };
 
-  const handleSelectSavedTravelCity = async (entry) => {
-    setActiveTravelPlan(entry);
-    setDemoPresetId('live');
-    syncLocationControl(entry.name, entry.lat, entry.lon, entry.label);
-    persistManualLocation(entry.name, entry.lat, entry.lon, entry.label, 'travel');
-    setLocationSourceState({ key: 'travelPinned', detail: entry.label });
-    await fetchWeatherByCoords(entry.lat, entry.lon, entry.label);
-    await fetchWeeklyForecast(entry.lat, entry.lon, entry.startDate, entry.days);
+  const handleSelectSavedTravelCity = (plan) => {
+    setActiveTravelPlan(plan);
   };
 
-  const handleRemoveTravelCity = (id) => {
-    const nextList = travelCities.filter((c) => c.id !== id);
-    setTravelCities(nextList);
-    if (activeTravelPlan?.id === id) {
-      setActiveTravelPlan(nextList[0] || null);
-      if (!nextList[0]) {
-        setWeeklyForecast([]);
-      }
+  const handleRemoveTravelCity = (planId) => {
+    const next = travelCities.filter((c) => c.id !== planId);
+    setTravelCities(next);
+    if (activeTravelPlan?.id === planId) {
+      setActiveTravelPlan(null);
+      setWeeklyForecast([]);
     }
-    if (user?.id) {
+    if (user) {
       try {
-        localStorage.setItem(getTravelCitiesKey(user.id), JSON.stringify(nextList));
+        localStorage.setItem(getTravelCitiesKey(user.id), JSON.stringify(next));
       } catch {
         // ignore
       }
     }
   };
 
-  const fetchItems = useCallback(async (userId) => {
-    setLoadingItems(true);
-    const { data, error: fetchError } = await supabase
-      .from('wardrobe_items')
-      .select('*')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false });
+  const filteredItems = useMemo(() => {
+    if (selectedCategoryFilter === 'Hamısı') return items;
+    return items.filter((item) => item.category === selectedCategoryFilter);
+  }, [items, selectedCategoryFilter]);
 
-    if (fetchError) {
-      setError(fetchError.message);
-    } else {
-      const resolved = await resolveWardrobeItemUrls(supabase, data || []);
-      setItems(resolved);
-    }
-    setLoadingItems(false);
-  }, []);
-
-  const migrateLegacyStorageKey = useCallback((legacyKey, scopedKey) => {
-    try {
-      const legacyValue = localStorage.getItem(legacyKey);
-      if (legacyValue !== null) {
-        if (localStorage.getItem(scopedKey) === null) {
-          localStorage.setItem(scopedKey, legacyValue);
-        }
-        localStorage.removeItem(legacyKey);
-      }
-    } catch {
-      // ignore
-    }
-  }, []);
-
-  const loadUserScopedState = useCallback(
-    (userId) => {
-      if (!userId) return;
-      migrateLegacyStorageKey('geyin_travel_cities', getTravelCitiesKey(userId));
-      migrateLegacyStorageKey('geyin_manual_location', getManualLocationKey(userId));
-      try {
-        const rawSaved = localStorage.getItem(getSavedOutfitsKey(userId));
-        const parsedSaved = rawSaved ? JSON.parse(rawSaved) : [];
-        setSavedOutfits(Array.isArray(parsedSaved) ? parsedSaved : []);
-      } catch {
-        setSavedOutfits([]);
-      }
-      try {
-        const rawTravel = localStorage.getItem(getTravelCitiesKey(userId));
-        const parsedTravel = rawTravel ? JSON.parse(rawTravel) : [];
-        if (Array.isArray(parsedTravel) && parsedTravel.length > 0) {
-          setTravelCities(parsedTravel);
-          setActiveTravelPlan(parsedTravel[0]);
-        } else {
-          setTravelCities([]);
-          setActiveTravelPlan(null);
-          setWeeklyForecast([]);
-        }
-      } catch {
-        setTravelCities([]);
-        setActiveTravelPlan(null);
-        setWeeklyForecast([]);
-      }
-    },
-    [migrateLegacyStorageKey]
+  const wardrobeInsights = useMemo(() => computeWardrobeInsights(items, lang), [items, lang]);
+  const suitcasePlan = useMemo(
+    () => buildSuitcasePlan(items, weeklyForecast, activeTravelPlan?.days || travelDaysInput, lang),
+    [items, weeklyForecast, activeTravelPlan, travelDaysInput, lang]
   );
 
-  const resetUserScopedState = useCallback(() => {
-    setItems([]);
-    setSavedOutfits([]);
-    setRecommendedOutfit(null);
-    setLockedSlots({});
-    setTravelCities([]);
-    setActiveTravelPlan(null);
-    setWeeklyForecast([]);
-    setOutfitStyleFilter('all');
-    setSelectedCategoryFilter('Hamısı');
-    setDemoPresetId('live');
-    setTravelCityInput('');
-    setTravelNoteInput('');
-  }, []);
+  const todayIso = useMemo(() => getLocalIsoDate(0), []);
+  const maxForecastIso = useMemo(() => getLocalIsoDate(MAX_OPEN_METEO_DAYS - 1), []);
+  const activeTravelDays = activeTravelPlan ? clampTravelDays(activeTravelPlan.days) : 0;
+  const activeTravelStart = activeTravelPlan?.startDate || todayIso;
+  const activeTravelEnd = activeTravelPlan ? addIsoDays(activeTravelStart, activeTravelDays - 1) : todayIso;
+  const coveredStartDate = weeklyForecast[0]?.date || null;
+  const coveredEndDate = weeklyForecast[weeklyForecast.length - 1]?.date || null;
 
-  const initLocationOnLogin = useCallback(
-    (userId) => {
-      let savedManual = null;
-      if (userId) {
-        try {
-          const raw = localStorage.getItem(getManualLocationKey(userId));
-          if (raw) savedManual = JSON.parse(raw);
-        } catch {
-          // ignore
-        }
-      }
-
-      if (savedManual && typeof savedManual.lat === 'number' && typeof savedManual.lon === 'number') {
-        const mode = savedManual.mode || 'manual';
-        setLocationMode(mode);
-        syncLocationControl(savedManual.city, savedManual.lat, savedManual.lon, savedManual.label || savedManual.city);
-        setLocationSourceState(
-          mode === 'search'
-            ? { key: 'citySearched', detail: '' }
-            : mode === 'travel'
-            ? { key: 'travelPinned', detail: savedManual.label || savedManual.city }
-            : { key: 'citySelected', detail: '' }
-        );
-        fetchWeatherByCoords(savedManual.lat, savedManual.lon, savedManual.label || savedManual.city);
-      } else {
-        detectGpsLocation();
-      }
-    },
-    [detectGpsLocation, fetchWeatherByCoords, syncLocationControl]
-  );
-
-  const initLocationOnLoginRef = useRef(initLocationOnLogin);
-  useEffect(() => {
-    initLocationOnLoginRef.current = initLocationOnLogin;
-  }, [initLocationOnLogin]);
-
-  const lockedSlotsRef = useRef(lockedSlots);
-  useEffect(() => {
-    lockedSlotsRef.current = lockedSlots;
-  }, [lockedSlots]);
-
-  const langRef = useRef(lang);
-  useEffect(() => {
-    langRef.current = lang;
-  }, [lang]);
-
-  useEffect(() => {
-    let active = true;
-    let loadedUserId = null;
-
-    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!active) return;
-      const currentUser = session?.user ?? null;
-      setUser(currentUser);
-      setLoading(false);
-
-      if (currentUser) {
-        userIdRef.current = currentUser.id;
-        if (loadedUserId !== currentUser.id) {
-          loadedUserId = currentUser.id;
-          loadUserScopedState(currentUser.id);
-          fetchItems(currentUser.id);
-          initLocationOnLoginRef.current(currentUser.id);
-        }
-      } else {
-        userIdRef.current = null;
-        loadedUserId = null;
-        resetUserScopedState();
-      }
-    });
-
-    return () => {
-      active = false;
-      authListener.subscription.unsubscribe();
-    };
-  }, [fetchItems, loadUserScopedState, resetUserScopedState]);
-
-  useEffect(() => {
-    if (outfitWeatherCore && items.length > 0) {
-      setRecommendedOutfit((prev) =>
-        buildSmartOutfit(
-          items,
-          outfitWeatherCore,
-          outfitStyleFilter,
-          lockedSlotsRef.current,
-          prev,
-          {},
-          langRef.current
-        )
-      );
-      setOutfitAnimKey((k) => k + 1);
-    } else {
-      setRecommendedOutfit(null);
-    }
-  }, [outfitWeatherCore, items, outfitStyleFilter]);
-
-  const displayedOutfitExplanation = useMemo(() => {
-    if (!recommendedOutfit) return '';
-    if (activeWeather) {
-      return buildOutfitExplanation(recommendedOutfit, activeWeather, lang);
-    }
-    return recommendedOutfit.explanation || '';
-  }, [recommendedOutfit, activeWeather, lang]);
-
-  const handleRegenerateOutfit = () => {
-    if (!activeWeather || items.length === 0) return;
-    setRecommendedOutfit((prev) =>
-      buildSmartOutfit(items, activeWeather, outfitStyleFilter, lockedSlots, prev, {}, lang)
-    );
-    setOutfitAnimKey((k) => k + 1);
-  };
-
-  const toggleLockSlot = (slotKey) => {
-    setLockedSlots((prev) => ({
-      ...prev,
-      [slotKey]: !prev[slotKey],
-    }));
-  };
-
-  const regenerateSingleSlot = (slotKey) => {
-    if (!activeWeather || !recommendedOutfit) return;
-    const tempLocks = {
-      top: true,
-      bottom: true,
-      outerwear: true,
-      shoes: true,
-      accessory: true,
-      [slotKey]: false,
-    };
-    const excludeMap = recommendedOutfit[slotKey]?.id
-      ? { [slotKey]: recommendedOutfit[slotKey].id }
-      : {};
-    const updated = buildSmartOutfit(
-      items,
-      activeWeather,
-      outfitStyleFilter,
-      tempLocks,
-      recommendedOutfit,
-      excludeMap,
-      lang
-    );
-    setRecommendedOutfit(updated);
-    setOutfitAnimKey((k) => k + 1);
-  };
-
-  const itemsById = useMemo(() => new Map(items.map((item) => [item.id, item])), [items]);
-  const [signedSavedUrls, setSignedSavedUrls] = useState({});
-
-  const resolvePieceForDisplay = useCallback(
-    (piece) => {
-      if (!piece) return null;
-      const liveItem = itemsById.get(piece.id);
-      if (liveItem) return liveItem;
-      const path = piece.image_path || extractClothesStoragePath(piece.image_url);
-      const signedUrl = path ? signedSavedUrls[path] : null;
-      return {
-        ...piece,
-        image_path: path || piece.image_path || null,
-        image_url: signedUrl || piece.image_url || '',
-      };
-    },
-    [itemsById, signedSavedUrls]
-  );
-
-  useEffect(() => {
-    if (!user?.id || savedOutfits.length === 0) return;
-    const missingPieces = [];
-    const seenPaths = new Set();
-
-    for (const saved of savedOutfits) {
-      for (const piece of saved.pieces || []) {
-        if (!piece || itemsById.has(piece.id)) continue;
-        const path = piece.image_path || extractClothesStoragePath(piece.image_url);
-        if (path && !signedSavedUrls[path] && !seenPaths.has(path)) {
-          seenPaths.add(path);
-          missingPieces.push({ image_path: path, image_url: piece.image_url || path });
-        }
-      }
-    }
-
-    if (missingPieces.length === 0) return;
-    let cancelled = false;
-    resolveWardrobeItemUrls(supabase, missingPieces).then((resolved) => {
-      if (cancelled) return;
-      setSignedSavedUrls((prev) => {
-        const next = { ...prev };
-        let changed = false;
-        for (const entry of resolved) {
-          if (entry?.image_path && entry?.image_url && next[entry.image_path] !== entry.image_url) {
-            next[entry.image_path] = entry.image_url;
-            changed = true;
-          }
-        }
-        return changed ? next : prev;
-      });
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [user?.id, savedOutfits, itemsById, signedSavedUrls]);
-
-  const handleImageError = useCallback(async (e, itemOrPiece) => {
-    const img = e.currentTarget;
-    if (!img || img.dataset.resigned === '1') return;
-    img.dataset.resigned = '1';
-
-    const pathOrUrl = itemOrPiece?.image_path || itemOrPiece?.image_url;
-    if (!pathOrUrl) return;
-
-    const freshUrl = await resolveClothesImageUrl(supabase, pathOrUrl);
-    if (freshUrl && freshUrl !== img.src) {
-      img.src = freshUrl;
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!user?.id) return;
-    const refreshMs = Math.max(60_000, (SIGNED_URL_TTL_SECONDS - 300) * 1000);
-    const interval = setInterval(() => {
-      fetchItems(user.id);
-    }, refreshMs);
-    return () => clearInterval(interval);
-  }, [user?.id, fetchItems]);
-
-  const serializePieceForStorage = (piece) => {
-    if (!piece) return null;
-    const imagePath =
-      piece.image_path || extractClothesStoragePath(piece.image_url) || null;
-    return {
-      id: piece.id,
-      category: piece.category,
-      sub_category: piece.sub_category || null,
-      color: piece.color || null,
-      warmth_level: piece.warmth_level,
-      waterproof: Boolean(piece.waterproof),
-      windproof: Boolean(piece.windproof),
-      style: piece.style || 'gundelik',
-      image_path: imagePath,
-    };
-  };
-
-  const handleSaveCurrentOutfit = () => {
-    if (!user || !recommendedOutfit || !activeWeather) return;
-    const pieces = [
-      recommendedOutfit.top,
-      recommendedOutfit.bottom,
-      recommendedOutfit.outerwear,
-      recommendedOutfit.shoes,
-      recommendedOutfit.accessory,
-    ]
-      .filter(Boolean)
-      .map(serializePieceForStorage);
-
-    if (pieces.length === 0) return;
-
-    const newSaved = {
-      id: Date.now(),
-      createdAt: new Date().toISOString(),
-      city: activeWeather.locationName,
-      temp: activeWeather.temp,
-      condition: activeWeather.conditionText,
-      outfitData: {
-        top: serializePieceForStorage(recommendedOutfit.top),
-        bottom: serializePieceForStorage(recommendedOutfit.bottom),
-        outerwear: serializePieceForStorage(recommendedOutfit.outerwear),
-        shoes: serializePieceForStorage(recommendedOutfit.shoes),
-        accessory: serializePieceForStorage(recommendedOutfit.accessory),
-        explanation: displayedOutfitExplanation || recommendedOutfit.explanation || '',
-      },
-      pieces,
-    };
-
-    const updatedList = [newSaved, ...savedOutfits].slice(0, 12);
-    setSavedOutfits(updatedList);
-    try {
-      localStorage.setItem(getSavedOutfitsKey(user.id), JSON.stringify(updatedList));
-    } catch {
-      // ignore
-    }
-    setMessage(tx.savedToast);
-  };
-
-  const handleLoadSavedOutfit = (saved) => {
-    if (!saved?.outfitData) return;
-    setRecommendedOutfit({
-      top: resolvePieceForDisplay(saved.outfitData.top),
-      bottom: resolvePieceForDisplay(saved.outfitData.bottom),
-      outerwear: resolvePieceForDisplay(saved.outfitData.outerwear),
-      shoes: resolvePieceForDisplay(saved.outfitData.shoes),
-      accessory: resolvePieceForDisplay(saved.outfitData.accessory),
-      explanation: saved.outfitData.explanation || '',
-    });
-    setOutfitAnimKey((k) => k + 1);
-    setMessage(tx.loadedToast);
-  };
-
-  const handleDeleteSavedOutfit = (savedId) => {
-    if (!user) return;
-    const updatedList = savedOutfits.filter((o) => o.id !== savedId);
-    setSavedOutfits(updatedList);
-    try {
-      localStorage.setItem(getSavedOutfitsKey(user.id), JSON.stringify(updatedList));
-    } catch {
-      // ignore
-    }
-  };
-
-  const handleAuth = async (e) => {
-    e.preventDefault();
-    setMessage('');
-    setError('');
-    setSubmitting(true);
-
-    try {
-      if (isRegister) {
-        const { error: signUpError } = await supabase.auth.signUp({ email, password });
-        if (signUpError) throw signUpError;
-        setMessage(tx.signUpSuccess);
-      } else {
-        const { error: signInError } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
-        if (signInError) throw signInError;
-      }
-    } catch (err) {
-      setError(err?.message || tx.genericError);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    userIdRef.current = null;
-    resetUserScopedState();
-    setMessage('');
-    setError('');
-  };
-
-  const handleAddItem = async (e) => {
-    e.preventDefault();
-    if (!user) return;
-    setError('');
-    setMessage('');
-
-    const validation = await validateImageFile(imageFile);
-    if (!validation.valid) {
-      if (validation.errorCode === 'missing_file') {
-        setError(tx.photoRequired);
-      } else if (validation.errorCode === 'file_too_large') {
-        setError(tx.photoTooLarge);
-      } else {
-        setError(tx.photoInvalidType);
-      }
-      return;
-    }
-
-    setUploading(true);
-    try {
-      const fileName = generateSafeStoragePath(user.id, validation.ext);
-
-      const { error: uploadError } = await supabase.storage
-        .from(CLOTHES_BUCKET)
-        .upload(fileName, imageFile, {
-          cacheControl: '3600',
-          contentType: validation.mimeType,
-          upsert: false,
-        });
-
-      if (uploadError) throw uploadError;
-
-      const normalizedCategory =
-        typeof category === 'string' ? category : category?.value || CATEGORIES[0].value;
-
-      const { error: insertError } = await supabase.from('wardrobe_items').insert([
-        {
-          user_id: user.id,
-          image_url: fileName,
-          image_path: fileName,
-          category: normalizedCategory,
-          sub_category: subCategory.trim() || null,
-          color: color.trim() || null,
-          warmth_level: Number(warmthLevel),
-          waterproof,
-          windproof,
-          style,
-        },
-      ]);
-
-      if (insertError) {
-        await supabase.storage.from(CLOTHES_BUCKET).remove([fileName]);
-        throw insertError;
-      }
-
-      setMessage(tx.addedToast);
-      setImageFile(null);
-      setSubCategory('');
-      setColor('');
-      setWarmthLevel(3);
-      setWaterproof(false);
-      setWindproof(false);
-      setStyle('gundelik');
-
-      const fileInput = document.getElementById('clothes-file-input');
-      if (fileInput) fileInput.value = '';
-
-      await fetchItems(user.id);
-    } catch (err) {
-      setError(err?.message || tx.genericError);
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const handleDeleteItem = async (item) => {
-    if (!user || !item) return;
-    setError('');
-    setMessage('');
-    setDeletingItemId(item.id);
-    try {
-      const { error: deleteError } = await supabase
-        .from('wardrobe_items')
-        .delete()
-        .eq('id', item.id)
-        .eq('user_id', user.id);
-
-      if (deleteError) throw deleteError;
-
-      const storagePath = item.image_path || extractClothesStoragePath(item.image_url);
-      let storageError = null;
-      if (storagePath) {
-        const res = await supabase.storage.from(CLOTHES_BUCKET).remove([storagePath]);
-        storageError = res.error;
-      }
-
-      setItems((prev) => prev.filter((i) => i.id !== item.id));
-
-      const slotKeys = ['top', 'bottom', 'outerwear', 'shoes', 'accessory'];
-      setSavedOutfits((prevSaved) => {
-        const cleaned = prevSaved
-          .map((saved) => {
-            const nextPieces = (saved.pieces || []).filter((p) => p.id !== item.id);
-            const nextOutfitData = saved.outfitData
-              ? { ...saved.outfitData }
-              : null;
-            if (nextOutfitData) {
-              for (const key of slotKeys) {
-                if (nextOutfitData[key]?.id === item.id) {
-                  nextOutfitData[key] = null;
-                }
-              }
-            }
-            return {
-              ...saved,
-              pieces: nextPieces,
-              outfitData: nextOutfitData,
-            };
-          })
-          .filter((saved) => saved.pieces.length > 0);
-
-        try {
-          localStorage.setItem(getSavedOutfitsKey(user.id), JSON.stringify(cleaned));
-        } catch {
-          // ignore
-        }
-        return cleaned;
-      });
-
-      setLockedSlots((prevLocks) => {
-        const nextLocks = { ...prevLocks };
-        let changed = false;
-        for (const key of slotKeys) {
-          if (recommendedOutfit?.[key]?.id === item.id && nextLocks[key]) {
-            nextLocks[key] = false;
-            changed = true;
-          }
-        }
-        return changed ? nextLocks : prevLocks;
-      });
-
-      setRecommendedOutfit((prevOutfit) => {
-        if (!prevOutfit) return prevOutfit;
-        let changed = false;
-        const nextOutfit = { ...prevOutfit };
-        for (const key of slotKeys) {
-          if (nextOutfit[key]?.id === item.id) {
-            nextOutfit[key] = null;
-            changed = true;
-          }
-        }
-        return changed ? nextOutfit : prevOutfit;
-      });
-
-      setPendingDeleteItem(null);
-      if (storageError) throw storageError;
-      setMessage(tx.itemDeletedToast);
-    } catch (err) {
-      setError(err?.message || tx.genericError);
-    } finally {
-      setDeletingItemId(null);
-    }
-  };
-
-  const t = {
-    page: isDark ? 'bg-zinc-950 text-white' : 'bg-stone-100 text-zinc-900',
-    card: isDark
-      ? 'bg-zinc-900 border-zinc-800'
-      : 'bg-white border-stone-200 shadow-sm',
-    hero: isDark
-      ? 'bg-gradient-to-br from-zinc-900 via-zinc-900 to-zinc-800/80 border-zinc-800'
-      : 'bg-gradient-to-br from-white via-stone-50 to-amber-50/60 border-stone-200 shadow-sm',
-    surface: isDark
-      ? 'bg-zinc-950 border-zinc-800'
-      : 'bg-stone-50 border-stone-200',
-    muted: isDark ? 'text-zinc-400' : 'text-zinc-600',
-    subtext: isDark ? 'text-zinc-300' : 'text-zinc-700',
-    border: isDark ? 'border-zinc-800' : 'border-stone-200',
-    pillIdle: isDark
-      ? 'bg-zinc-900 text-zinc-300 hover:text-white border-zinc-800'
-      : 'bg-white text-zinc-700 hover:text-zinc-900 border-stone-200',
-    pillActive: isDark ? 'bg-white text-zinc-950' : 'bg-zinc-900 text-white',
-    focusRing: isDark
-      ? 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-900'
-      : 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-700 focus-visible:ring-offset-2 focus-visible:ring-offset-white',
-    errorBanner: isDark
-      ? 'bg-red-500/15 border-red-500/40 text-red-300'
-      : 'bg-red-50 border-red-300 text-red-800',
-    successBanner: isDark
-      ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300'
-      : 'bg-emerald-50 border-emerald-300 text-emerald-800',
-    emeraldText: isDark ? 'text-emerald-300' : 'text-emerald-800',
-    emeraldPill: isDark
-      ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-400/35'
-      : 'bg-emerald-50 text-emerald-800 border border-emerald-700/25',
-    emeraldBtn: isDark
-      ? 'bg-emerald-500/20 hover:bg-emerald-500/30 border-emerald-400/40 text-emerald-300'
-      : 'bg-emerald-100 hover:bg-emerald-200 border-emerald-400 text-emerald-900',
-    amberBanner: isDark
-      ? 'bg-amber-500/15 border-amber-500/35 text-amber-300'
-      : 'bg-amber-50 border-amber-300 text-amber-900',
-    amberLocked: isDark
-      ? 'bg-amber-400/20 text-amber-300 font-semibold'
-      : 'bg-amber-100 text-amber-900 border border-amber-300 font-semibold',
-    skyText: isDark ? 'text-sky-300' : 'text-sky-800',
-    skyBadge: isDark ? 'bg-sky-500/15 text-sky-300' : 'bg-sky-100 text-sky-900',
-    tealBadge: isDark ? 'bg-teal-500/15 text-teal-300' : 'bg-teal-100 text-teal-900',
-  };
-
-  const renderTopControls = () => (
-    <div className="flex flex-wrap items-center gap-2">
-      <div
-        role="group"
-        aria-label={tx.languageGroupLabel}
-        className={`inline-flex items-center rounded-xl p-1 border text-xs ${
-          isDark ? 'bg-zinc-900 border-zinc-800' : 'bg-stone-200/70 border-stone-300'
-        }`}
-      >
-        {[
-          { id: 'az', label: 'AZ' },
-          { id: 'en', label: 'EN' },
-          { id: 'ru', label: 'RU' },
-        ].map((l) => (
-          <button
-            key={l.id}
-            type="button"
-            aria-pressed={lang === l.id}
-            onClick={() => handleSelectLang(l.id)}
-            className={`min-h-[32px] min-w-[36px] px-2.5 py-1 rounded-lg font-semibold transition cursor-pointer active:scale-95 ${t.focusRing} ${
-              lang === l.id ? 'bg-emerald-700 text-white shadow-xs' : t.muted
-            }`}
-          >
-            {l.label}
-          </button>
-        ))}
-      </div>
-
-      <div
-        role="group"
-        aria-label={tx.themeGroupLabel}
-        className={`inline-flex items-center rounded-xl p-1 border text-xs ${
-          isDark ? 'bg-zinc-900 border-zinc-800' : 'bg-stone-200/70 border-stone-300'
-        }`}
-      >
-        {[
-          { id: 'auto', label: tx.auto },
-          { id: 'light', label: tx.light },
-          { id: 'dark', label: tx.dark },
-        ].map((m) => (
-          <button
-            key={m.id}
-            type="button"
-            aria-pressed={themeMode === m.id}
-            onClick={() => handleSelectTheme(m.id)}
-            className={`min-h-[32px] px-2.5 py-1 rounded-lg font-medium transition cursor-pointer active:scale-95 ${t.focusRing} ${
-              themeMode === m.id
-                ? isDark
-                  ? 'bg-white text-zinc-950 shadow-xs'
-                  : 'bg-white text-zinc-900 shadow-xs'
-                : t.muted
-            }`}
-          >
-            {m.label}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-
-  const renderToasts = () => {
-    if (!error && !message) return null;
+  if (!authChecked) {
     return (
-      <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2 w-[calc(100vw-2rem)] max-w-sm pointer-events-none">
-        {error && (
-          <div
-            role="alert"
-            aria-live="assertive"
-            className={`pointer-events-auto flex items-start justify-between gap-3 rounded-xl border px-4 py-3 text-sm shadow-lg animate-outfit-in ${
-              isDark
-                ? 'bg-zinc-900/95 border-red-500/40 text-red-300'
-                : 'bg-white/95 border-red-300 text-red-800'
-            }`}
-          >
-            <span className="leading-snug">{error}</span>
-            <button
-              type="button"
-              onClick={() => setError('')}
-              aria-label={tx.closeNotification}
-              className={`shrink-0 rounded-lg px-2 py-0.5 text-xs font-semibold transition cursor-pointer ${
-                isDark ? 'hover:bg-red-500/20 text-red-300' : 'hover:bg-red-100 text-red-800'
-              }`}
-            >
-              ✕
-            </button>
-          </div>
-        )}
-        {message && (
-          <div
-            role="status"
-            aria-live="polite"
-            className={`pointer-events-auto flex items-start justify-between gap-3 rounded-xl border px-4 py-3 text-sm shadow-lg animate-outfit-in ${
-              isDark
-                ? 'bg-zinc-900/95 border-emerald-500/40 text-emerald-300'
-                : 'bg-white/95 border-emerald-300 text-emerald-800'
-            }`}
-          >
-            <span className="leading-snug">{message}</span>
-            <button
-              type="button"
-              onClick={() => setMessage('')}
-              aria-label={tx.closeNotification}
-              className={`shrink-0 rounded-lg px-2 py-0.5 text-xs font-semibold transition cursor-pointer ${
-                isDark ? 'hover:bg-emerald-500/20 text-emerald-300' : 'hover:bg-emerald-100 text-emerald-800'
-              }`}
-            >
-              ✕
-            </button>
-          </div>
-        )}
+      <div className="min-h-screen flex items-center justify-center bg-stone-50 text-zinc-600 dark:bg-zinc-950 dark:text-zinc-400">
+        <p className="text-sm font-medium animate-pulse">{tx.loading}</p>
       </div>
-    );
-  };
-
-  if (loading) {
-    return (
-      <main className={`auth-shell min-h-screen ${t.page} flex items-center justify-center transition-colors duration-300`}>
-        <p className={`${t.muted} animate-pulse`}>{tx.loading}</p>
-      </main>
     );
   }
 
   if (!user) {
     return (
-      <main className={`auth-shell min-h-screen ${t.page} flex items-center justify-center p-6 transition-colors duration-300`}>
-        <div className={`auth-card w-full max-w-md rounded-2xl ${t.card} border p-6 space-y-6 animate-outfit-in`}>
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight">Geyin</h1>
-              <p className={`text-sm ${t.muted} mt-1`}>
-                {isRegister ? tx.registerSubtitle : tx.loginSubtitle}
-              </p>
-            </div>
-            {renderTopControls()}
-          </div>
-
-          <form onSubmit={handleAuth} className="space-y-4">
-            <div>
-              <label htmlFor="auth-email" className={`block text-sm ${t.subtext} mb-1.5`}>
-                {tx.email}
-              </label>
-              <input
-                id="auth-email"
-                type="email"
-                required
-                autoComplete="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="name@example.com"
-                className={`w-full rounded-xl ${t.surface} border px-3.5 py-2.5 text-sm ${t.focusRing}`}
-              />
-            </div>
-
-            <div>
-              <label htmlFor="auth-password" className={`block text-sm ${t.subtext} mb-1.5`}>
-                {tx.password}
-              </label>
-              <input
-                id="auth-password"
-                type="password"
-                required
-                minLength={6}
-                autoComplete={isRegister ? 'new-password' : 'current-password'}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder={tx.passwordHint}
-                className={`w-full rounded-xl ${t.surface} border px-3.5 py-2.5 text-sm ${t.focusRing}`}
-              />
-            </div>
-
-            {error && (
-              <div
-                role="alert"
-                className={`rounded-xl border p-3 text-xs flex items-center justify-between gap-2 ${t.errorBanner}`}
-              >
-                <span>{error}</span>
-                <button
-                  type="button"
-                  onClick={() => setError('')}
-                  aria-label={tx.closeNotification}
-                  className={`shrink-0 min-h-[28px] min-w-[28px] px-1.5 py-0.5 rounded hover:bg-red-500/20 cursor-pointer ${t.focusRing}`}
-                >
-                  ✕
-                </button>
-              </div>
-            )}
-
-            {message && (
-              <div
-                role="status"
-                className={`rounded-xl border p-3 text-xs flex items-center justify-between gap-2 ${t.successBanner}`}
-              >
-                <span>{message}</span>
-                <button
-                  type="button"
-                  onClick={() => setMessage('')}
-                  aria-label={tx.closeNotification}
-                  className={`shrink-0 min-h-[28px] min-w-[28px] px-1.5 py-0.5 rounded hover:bg-emerald-500/20 cursor-pointer ${t.focusRing}`}
-                >
-                  ✕
-                </button>
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={submitting}
-              className={`w-full min-h-[44px] rounded-xl ${t.pillActive} disabled:opacity-50 font-semibold py-2.5 text-sm transition cursor-pointer active:scale-[0.98] ${t.focusRing}`}
-            >
-              {submitting ? tx.pleaseWait : isRegister ? tx.signUp : tx.signIn}
-            </button>
-          </form>
-
-          <div className={`pt-2 border-t ${t.border} text-center`}>
-            <button
-              type="button"
-              onClick={() => {
-                setIsRegister(!isRegister);
-                setError('');
-                setMessage('');
-              }}
-              className={`min-h-[36px] px-3 py-1.5 rounded-lg text-xs ${t.muted} transition cursor-pointer ${t.focusRing}`}
-            >
-              {isRegister ? tx.haveAccount : tx.noAccount}
-            </button>
-          </div>
-        </div>
-      </main>
+      <AuthForm
+        isDark={isDark}
+        tx={tx}
+        lang={lang}
+        themeMode={themeMode}
+        onSelectLang={handleSelectLang}
+        onSelectTheme={handleSelectTheme}
+        isRegister={isRegister}
+        onToggleRegister={() => {
+          setIsRegister((prev) => !prev);
+          setError('');
+          setMessage('');
+        }}
+        email={email}
+        onEmailChange={setEmail}
+        password={password}
+        onPasswordChange={setPassword}
+        error={error}
+        message={message}
+        onDismissError={() => setError('')}
+        onDismissMessage={() => setMessage('')}
+        submitting={submitting}
+        onSubmit={handleAuthSubmit}
+      />
     );
   }
 
-  const filteredItems =
-    selectedCategoryFilter === 'Hamısı'
-      ? items
-      : items.filter((item) => item.category === selectedCategoryFilter);
-
-  const outfitSlots = recommendedOutfit
-    ? [
-        { key: 'top', label: tx.slotLabels.top, item: recommendedOutfit.top },
-        { key: 'bottom', label: tx.slotLabels.bottom, item: recommendedOutfit.bottom },
-        ...(recommendedOutfit.outerwear || lockedSlots.outerwear
-          ? [{ key: 'outerwear', label: tx.slotLabels.outerwear, item: recommendedOutfit.outerwear }]
-          : []),
-        { key: 'shoes', label: tx.slotLabels.shoes, item: recommendedOutfit.shoes },
-        ...(recommendedOutfit.accessory || lockedSlots.accessory
-          ? [{ key: 'accessory', label: tx.slotLabels.accessory, item: recommendedOutfit.accessory }]
-          : []),
-      ]
-    : [];
-
-  const activeTravelDays = clampTravelDays(activeTravelPlan?.days || travelDaysInput);
-  const activeTravelStart = activeTravelPlan?.startDate || getLocalIsoDate(0);
-  const activeTravelEnd = addIsoDays(activeTravelStart, activeTravelDays - 1);
-  const todayIso = getLocalIsoDate(0);
-  const maxForecastIso = getLocalIsoDate(MAX_OPEN_METEO_DAYS - 1);
-  const coveredStartDate = weeklyForecast[0]?.date;
-  const coveredEndDate = weeklyForecast[weeklyForecast.length - 1]?.date;
-
   return (
-    <main className={`app-shell min-h-screen ${t.page} p-4 md:p-8 transition-colors duration-300`} data-theme={isDark ? 'dark' : 'light'}>
-      <div className="app-content max-w-6xl mx-auto space-y-6">
-        {/* Top bar */}
-        <header className={`app-header flex flex-wrap items-center justify-between gap-4 border-b ${t.border} pb-5`}>
-          <div className="brand-lockup">
-            <span className="brand-mark" aria-hidden="true">
-              G
-            </span>
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight">Geyin</h1>
-              <p className={`text-xs ${t.muted} mt-1`}>{user.email}</p>
-            </div>
+    <div className="min-h-screen bg-[#f5f4ef] text-[#242a25] dark:bg-[#111513] dark:text-[#f3f4f1] transition-colors duration-200">
+      <div className="mx-auto max-w-6xl px-4 sm:px-6 py-8 space-y-8">
+        {/* Header with App Title, Language/Theme Toggles, and Logout */}
+        <header className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-stone-200 dark:border-zinc-800">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight bg-gradient-to-r from-emerald-800 to-teal-700 dark:from-emerald-300 dark:to-teal-200 bg-clip-text text-transparent">
+              Geyin
+            </h1>
+            <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-0.5">{user.email}</p>
           </div>
-          <div className="flex flex-wrap items-center gap-2.5">
-            {renderTopControls()}
+
+          <div className="flex flex-wrap items-center gap-3">
+            <TopControls
+              lang={lang}
+              onSelectLang={handleSelectLang}
+              themeMode={themeMode}
+              onSelectTheme={handleSelectTheme}
+              tx={tx}
+            />
+
             <button
               type="button"
               onClick={handleLogout}
-              className={`min-h-[36px] rounded-xl ${t.card} border px-4 py-2 text-xs font-medium transition cursor-pointer active:scale-95 ${t.focusRing}`}
+              className="min-h-[36px] rounded-xl bg-white border-stone-200 shadow-sm dark:bg-zinc-900 dark:border-zinc-800 dark:shadow-none hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40 dark:hover:text-red-400 border px-3.5 py-1.5 text-xs font-medium transition cursor-pointer active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
             >
               {tx.logout}
             </button>
           </div>
         </header>
 
-        {/* Tabs switcher */}
-        <div role="tablist" className="app-tabs flex flex-wrap gap-2">
+        {/* Global Notifications */}
+        {error && (
+          <div
+            role="alert"
+            className="flex items-center justify-between rounded-xl border border-red-200 bg-red-50 p-4 text-xs font-medium text-red-800 dark:border-red-900/40 dark:bg-red-950/40 dark:text-red-300 animate-outfit-in"
+          >
+            <span>{error}</span>
+            <button
+              type="button"
+              onClick={() => setError('')}
+              className="text-xs font-bold text-red-700 dark:text-red-400 hover:underline cursor-pointer ml-3"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
+        {message && (
+          <div
+            role="status"
+            className="flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-xs font-medium text-emerald-800 dark:border-emerald-900/40 dark:bg-emerald-950/40 dark:text-emerald-300 animate-outfit-in"
+          >
+            <span>{message}</span>
+            <button
+              type="button"
+              onClick={() => setMessage('')}
+              className="text-xs font-bold text-emerald-700 dark:text-emerald-400 hover:underline cursor-pointer ml-3"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
+        {/* Navigation Tabs (role="tablist" / "tab" / aria-selected) */}
+        <nav
+          role="tablist"
+          aria-label="App Navigation"
+          className="flex space-x-2 border-b border-stone-200 dark:border-zinc-800 pb-2"
+        >
           <button
             type="button"
             role="tab"
+            id="tab-today"
             aria-selected={activeTab === 'today'}
+            aria-controls="panel-today"
             onClick={() => setActiveTab('today')}
-            className={`app-tab rounded-xl px-4 py-2 text-xs font-semibold transition cursor-pointer active:scale-95 ${t.focusRing} ${
-              activeTab === 'today' ? t.pillActive : `${t.pillIdle} border`
+            className={`min-h-[40px] px-4 py-2 text-xs font-semibold rounded-xl transition cursor-pointer active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-700 dark:focus-visible:ring-emerald-300 ${
+              activeTab === 'today'
+                ? 'bg-zinc-900 text-white dark:bg-white dark:text-zinc-950 shadow-sm'
+                : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
             }`}
           >
             {tx.tabToday}
@@ -2203,883 +1040,140 @@ export default function HomePage() {
           <button
             type="button"
             role="tab"
+            id="tab-travel"
             aria-selected={activeTab === 'travel'}
+            aria-controls="panel-travel"
             onClick={() => setActiveTab('travel')}
-            className={`app-tab rounded-xl px-4 py-2 text-xs font-semibold transition cursor-pointer active:scale-95 ${t.focusRing} ${
-              activeTab === 'travel' ? t.pillActive : `${t.pillIdle} border`
+            className={`min-h-[40px] px-4 py-2 text-xs font-semibold rounded-xl transition cursor-pointer active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-700 dark:focus-visible:ring-emerald-300 ${
+              activeTab === 'travel'
+                ? 'bg-zinc-900 text-white dark:bg-white dark:text-zinc-950 shadow-sm'
+                : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
             }`}
           >
             {tx.tabTravel}
           </button>
-        </div>
+        </nav>
 
-        {renderToasts()}
-
-        {activeTab === 'travel' ? (
-          <section className={`app-panel rounded-2xl ${t.hero} border p-6 space-y-6 animate-outfit-in`}>
-            <div>
-              <h2 className="text-xl font-bold">{tx.travelTitle}</h2>
-              <p className={`text-xs ${t.muted} mt-1`}>{tx.travelSubtitle}</p>
-            </div>
-
-            <form onSubmit={handleAddTravelCity} className="grid grid-cols-1 md:grid-cols-6 gap-3">
-              <div className="md:col-span-2 flex items-end">
-                <label htmlFor="travel-city-input" className="sr-only">
-                  {tx.travelInputPlaceholder}
-                </label>
-                <input
-                  id="travel-city-input"
-                  type="text"
-                  required
-                  value={travelCityInput}
-                  onChange={(e) => setTravelCityInput(e.target.value)}
-                  placeholder={tx.travelInputPlaceholder}
-                  className={`w-full rounded-xl ${t.surface} border px-3.5 py-2.5 text-xs ${t.focusRing}`}
-                />
-              </div>
-              <div>
-                <label htmlFor="travel-start-date-input" className={`block text-[11px] ${t.muted} mb-1`}>
-                  {tx.travelStartDateLabel}
-                </label>
-                <input
-                  id="travel-start-date-input"
-                  type="date"
-                  min={todayIso}
-                  max={maxForecastIso}
-                  value={travelStartDateInput}
-                  onChange={(e) => setTravelStartDateInput(e.target.value || getLocalIsoDate(0))}
-                  className={`w-full rounded-xl ${t.surface} border px-3 py-2 text-xs ${t.focusRing}`}
-                />
-              </div>
-              <div>
-                <label htmlFor="travel-days-input" className={`block text-[11px] ${t.muted} mb-1`}>
-                  {tx.travelDaysLabel}
-                </label>
-                <input
-                  id="travel-days-input"
-                  type="number"
-                  min={1}
-                  max={MAX_TRAVEL_DAYS}
-                  value={travelDaysInput}
-                  onChange={(e) => setTravelDaysInput(e.target.value)}
-                  className={`w-full rounded-xl ${t.surface} border px-3.5 py-2 text-xs ${t.focusRing}`}
-                />
-              </div>
-              <div className="md:col-span-2 flex items-end">
-                <button
-                  type="submit"
-                  disabled={savingTravelCity}
-                  className={`w-full min-h-[42px] rounded-xl ${t.pillActive} disabled:opacity-50 px-4 py-2.5 text-xs font-semibold transition cursor-pointer active:scale-95 ${t.focusRing}`}
-                >
-                  {savingTravelCity ? tx.searching : tx.travelSaveBtn}
-                </button>
-              </div>
-              <div className="md:col-span-6">
-                <label htmlFor="travel-note-input" className="sr-only">
-                  {tx.travelNotePlaceholder}
-                </label>
-                <input
-                  id="travel-note-input"
-                  type="text"
-                  value={travelNoteInput}
-                  onChange={(e) => setTravelNoteInput(e.target.value)}
-                  placeholder={tx.travelNotePlaceholder}
-                  className={`w-full rounded-xl ${t.surface} border px-3.5 py-2.5 text-xs ${t.focusRing}`}
-                />
-              </div>
-            </form>
-
-            {/* Trip Forecast */}
-            {activeTravelPlan && (
-              <div className={`space-y-3 pt-4 border-t ${t.border}`}>
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <h3 className="text-sm font-semibold">
-                      {tx.weeklyForecastTitle} — {activeTravelPlan.label} ({activeTravelDays}{' '}
-                      {tx.daysUnit})
-                    </h3>
-                    <p className={`text-[11px] ${t.muted} mt-0.5`}>
-                      {activeTravelStart} – {activeTravelEnd}
-                      {coveredStartDate && coveredEndDate
-                        ? ` • ${tx.forecastDaysIncluded}: ${coveredStartDate} – ${coveredEndDate} (${weeklyForecast.length}/${activeTravelDays} ${tx.daysUnit})`
-                        : ''}
-                    </p>
-                  </div>
-                  {activeTravelPlan.note && (
-                    <span className={`text-xs ${t.muted}`}>{activeTravelPlan.note}</span>
-                  )}
-                </div>
-
-                {loadingWeekly ? (
-                  <p className={`text-xs ${t.muted}`}>{tx.checkingWeather}</p>
-                ) : weeklyForecastError ? (
-                  <p role="alert" className="text-xs text-red-500">
-                    {weeklyForecastError}
-                  </p>
-                ) : weeklyForecast.length === 0 ? (
-                  <p className={`text-xs ${t.muted}`}>{tx.forecastOutOfRange}</p>
-                ) : (
-                  <>
-                    {weeklyForecast.length < activeTravelDays && (
-                      <p className="text-xs text-amber-500">{tx.forecastPartialNote}</p>
-                    )}
-                    <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2.5">
-                      {weeklyForecast.map((day) => (
-                        <div
-                          key={day.date}
-                          className={`rounded-xl ${t.surface} border p-3 text-center space-y-1`}
-                        >
-                          <p className={`text-[11px] font-semibold ${t.subtext}`}>
-                            {formatForecastDate(day.date, lang)}
-                          </p>
-                          <p className="text-sm font-bold">
-                            {day.maxTemp}° / {day.minTemp}°
-                          </p>
-                          <p className={`text-[11px] font-medium ${t.skyText}`}>💧 {day.rainProb}%</p>
-                        </div>
-                      ))}
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
-
-            {/* Suitcase Items */}
-            {activeTravelPlan && (
-              <div className={`space-y-3 pt-4 border-t ${t.border}`}>
-                <div>
-                  <h3 className="text-sm font-semibold">{tx.suitcaseTitle}</h3>
-                  <p className={`text-xs ${t.muted} mt-0.5`}>
-                    {activeTravelDays} {tx.suitcaseSummary}
-                    {coveredStartDate && coveredEndDate
-                      ? ` (${coveredStartDate} – ${coveredEndDate}, ${weeklyForecast.length}/${activeTravelDays} ${tx.daysUnit})`
-                      : ''}
-                  </p>
-                  {suitcasePlan.note && (
-                    <p className={`text-xs font-medium ${t.emeraldText} mt-1`}>{suitcasePlan.note}</p>
-                  )}
-                </div>
-
-                {suitcasePlan.suggestedItems.length === 0 ? (
-                  <p className={`text-xs ${t.muted}`}>{tx.emptySuitcaseMsg}</p>
-                ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
-                    {suitcasePlan.suggestedItems.map((piece) => (
-                      <div
-                        key={piece.id}
-                        className={`rounded-xl ${t.surface} border overflow-hidden flex flex-col`}
-                      >
-                        <img
-                          src={piece.image_url}
-                          alt={piece.sub_category || getCategoryLabel(piece.category)}
-                          onError={(e) => handleImageError(e, piece)}
-                          className="w-full h-32 object-cover"
-                        />
-                        <div className="p-2.5 space-y-1">
-                          <p className="text-[11px] font-semibold truncate">
-                            {getCategoryLabel(piece.category)}
-                          </p>
-                          <p className="text-xs font-medium truncate">
-                            {piece.sub_category || piece.color || '-'}
-                          </p>
-                          <p className={`text-[11px] ${t.muted}`}>
-                            {tx.warmthShort} {piece.warmth_level}/5
-                            {piece.waterproof ? ` • ${tx.waterproofBadge}` : ''}
-                          </p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Saved Travel Cities */}
-            <div className={`space-y-3 pt-4 border-t ${t.border}`}>
-              <h3 className="text-sm font-semibold">{tx.travelSavedListTitle}</h3>
-              {travelCities.length === 0 ? (
-                <p className={`text-xs ${t.muted}`}>{tx.travelEmptyMsg}</p>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {travelCities.map((c) => (
-                    <div
-                      key={c.id}
-                      className={`rounded-xl ${t.surface} border p-3.5 flex items-center justify-between gap-3`}
-                    >
-                      <div>
-                        <p className="text-xs font-semibold">
-                          {c.label} • {c.startDate ? `${c.startDate} • ` : ''}{c.days || 3} {tx.daysUnit}
-                        </p>
-                        {c.note && <p className={`text-[11px] ${t.muted} mt-0.5`}>{c.note}</p>}
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => handleSelectSavedTravelCity(c)}
-                          className={`min-h-[32px] rounded-lg px-3 py-1 text-xs font-medium cursor-pointer transition active:scale-95 ${t.emeraldPill} ${t.focusRing}`}
-                        >
-                          {tx.useCityBtn}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveTravelCity(c.id)}
-                          className={`min-h-[32px] rounded-lg px-2.5 py-1 text-xs ${t.muted} hover:text-red-500 cursor-pointer transition ${t.focusRing}`}
-                        >
-                          {tx.removeCityBtn}
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </section>
-        ) : (
-          /* Weather & Smart Outfit Section */
-          <section className={`app-panel rounded-2xl ${t.hero} border p-6 space-y-6 transition-all duration-300`}>
-            <div className="flex flex-wrap items-center justify-between gap-4">
-              <div>
-                <span className={`text-[11px] uppercase tracking-wider ${t.muted}`}>
-                  {tx.liveWeatherTitle} • {locationSource} (
-                  {tx.locationModeLabels?.[locationMode] || tx.locationModeLabels?.manual})
-                </span>
-                <h2 className="text-xl font-bold mt-1">
-                  {loadingWeather && demoPresetId === 'live'
-                    ? tx.checkingWeather
-                    : activeWeather
-                    ? `${activeWeather.locationName}: ${activeWeather.temp}°C (${activeWeather.conditionText})`
-                    : tx.chooseLocation}
-                </h2>
-                {activeWeather && (
-                  <p className={`text-xs ${t.muted} mt-1`}>
-                    {tx.feelsLike}: {activeWeather.apparent}°C • {tx.dailyRange}:{' '}
-                    {activeWeather.minTemp}°C / {activeWeather.maxTemp}°C • {tx.wind}:{' '}
-                    {Math.round(activeWeather.wind)} {tx.kmh}
-                  </p>
-                )}
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={detectGpsLocation}
-                  className={`min-h-[38px] rounded-xl ${t.pillActive} px-3.5 py-2 text-xs font-semibold transition cursor-pointer active:scale-95 ${t.focusRing}`}
-                >
-                  {tx.gpsBtn}
-                </button>
-
-                <label htmlFor="city-select" className="sr-only">
-                  {tx.chooseLocation}
-                </label>
-                <select
-                  id="city-select"
-                  value={selectedCity}
-                  onChange={(e) => handleCitySelect(e.target.value)}
-                  className={`rounded-xl ${t.surface} border px-3 py-2 text-xs ${t.focusRing}`}
-                >
-                  {customCityOption && (
-                    <option value={customCityOption.value}>{customCityOption.label}</option>
-                  )}
-                  {WORLD_CITIES.map((city) => (
-                    <option key={`${city.name}-${city.code}`} value={city.name}>
-                      {city.nameByLang ? city.nameByLang[lang] || city.name : city.name} ({city.code})
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <form onSubmit={handleWorldCitySearch} className="flex flex-wrap gap-2">
-              <label htmlFor="city-search-input" className="sr-only">
-                {tx.searchCityPlaceholder}
-              </label>
-              <input
-                id="city-search-input"
-                type="text"
-                value={citySearchQuery}
-                onChange={(e) => setCitySearchQuery(e.target.value)}
-                placeholder={tx.searchCityPlaceholder}
-                className={`flex-1 min-w-[210px] rounded-xl ${t.surface} border px-3.5 py-2 text-xs ${t.focusRing}`}
+        {/* Tab Panels */}
+        <main className="space-y-8">
+          {activeTab === 'today' ? (
+            <div id="panel-today" role="tabpanel" aria-labelledby="tab-today" className="space-y-8">
+              <WeatherPanel
+                tx={tx}
+                lang={lang}
+                locationSource={locationSource}
+                locationMode={locationMode}
+                loadingWeather={loadingWeather}
+                demoPresetId={demoPresetId}
+                activeWeather={activeWeather}
+                selectedCity={selectedCity}
+                customCityOption={customCityOption}
+                citySearchQuery={citySearchQuery}
+                searchingCity={searchingCity}
+                onDetectGpsLocation={detectGpsLocation}
+                onCitySelect={handleCitySelect}
+                onCitySearchQueryChange={setCitySearchQuery}
+                onWorldCitySearch={handleWorldCitySearch}
+                onSelectDemoPreset={setDemoPresetId}
+                items={items}
+                recommendedOutfit={recommendedOutfit}
+                displayedOutfitExplanation={recommendedOutfit?.explanation || ''}
+                outfitAnimKey={outfitAnimKey}
+                lockedSlots={lockedSlots}
+                outfitStyleFilter={outfitStyleFilter}
+                onStyleFilterChange={setOutfitStyleFilter}
+                onRegenerateOutfit={handleRegenerateOutfit}
+                onSaveCurrentOutfit={handleSaveCurrentOutfit}
+                onToggleLockSlot={handleToggleLockSlot}
+                onRegenerateSingleSlot={handleRegenerateSingleSlot}
               />
-              <button
-                type="submit"
-                disabled={searchingCity}
-                className={`min-h-[38px] rounded-xl ${t.card} border px-4 py-2 text-xs font-medium transition cursor-pointer active:scale-95 ${t.focusRing}`}
-              >
-                {searchingCity ? tx.searching : tx.searchBtn}
-              </button>
-            </form>
 
-            <div className="flex flex-wrap items-center gap-2 pt-1">
-              <span className={`text-[11px] ${t.muted} mr-1`}>{tx.demoMode}</span>
-              {DEMO_PRESETS.map((preset) => (
-                <button
-                  key={preset.id}
-                  type="button"
-                  aria-pressed={demoPresetId === preset.id}
-                  onClick={() => setDemoPresetId(preset.id)}
-                  className={`min-h-[32px] rounded-full px-3 py-1 text-xs font-medium transition cursor-pointer active:scale-95 ${t.focusRing} ${
-                    demoPresetId === preset.id ? t.emeraldPill : `${t.pillIdle} border`
-                  }`}
-                >
-                  {preset.label[lang] || preset.label.az}
-                </button>
-              ))}
-            </div>
-
-            {activeWeather && (
-              <div className="space-y-2.5">
-                <div className={`rounded-xl ${t.surface} border p-4`}>
-                  <p className={`text-xs font-semibold ${t.subtext} mb-1`}>
-                    {tx.generalAdviceTitle}
-                  </p>
-                  <p className="text-sm leading-relaxed">{activeWeather.generalAdvice}</p>
-                </div>
-
-                {activeWeather.eveningAlert && (
-                  <div className={`rounded-xl border px-4 py-3 text-xs font-medium ${t.amberBanner}`}>
-                    {activeWeather.eveningAlert}
-                  </div>
-                )}
-              </div>
-            )}
-
-            <div className={`space-y-4 pt-2 border-t ${t.border}`}>
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <h3 className="text-base font-semibold">{tx.todayOutfitTitle}</h3>
-                  {displayedOutfitExplanation ? (
-                    <p className={`text-xs font-medium ${t.emeraldText} mt-0.5`}>
-                      {tx.whyOutfit} {displayedOutfitExplanation}
-                    </p>
-                  ) : (
-                    <p className={`text-xs ${t.muted}`}>{tx.defaultOutfitSub}</p>
-                  )}
-                </div>
-
-                <div className="flex flex-wrap items-center gap-2">
-                  <label htmlFor="outfit-style-select" className="sr-only">
-                    {tx.styleLabel}
-                  </label>
-                  <select
-                    id="outfit-style-select"
-                    value={outfitStyleFilter}
-                    onChange={(e) => setOutfitStyleFilter(e.target.value)}
-                    className={`rounded-xl ${t.surface} border px-3 py-2 text-xs ${t.focusRing}`}
-                  >
-                    <option value="all">{tx.allStyles}</option>
-                    {STYLES.map((st) => (
-                      <option key={st.value} value={st.value}>
-                        {st.label[lang] || st.label.az}
-                      </option>
-                    ))}
-                  </select>
-
-                  <button
-                    type="button"
-                    disabled={!activeWeather || items.length === 0}
-                    onClick={handleRegenerateOutfit}
-                    className={`min-h-[38px] rounded-xl ${t.card} disabled:opacity-40 border px-3.5 py-2 text-xs font-medium transition cursor-pointer active:scale-95 ${t.focusRing}`}
-                  >
-                    {tx.generateAnother}
-                  </button>
-
-                  <button
-                    type="button"
-                    disabled={!recommendedOutfit}
-                    onClick={handleSaveCurrentOutfit}
-                    className={`min-h-[38px] rounded-xl disabled:opacity-40 border px-3.5 py-2 text-xs font-medium transition cursor-pointer active:scale-95 ${t.emeraldBtn} ${t.focusRing}`}
-                  >
-                    {tx.saveOutfit}
-                  </button>
-                </div>
-              </div>
-
-              {items.length === 0 ? (
-                <div className={`rounded-xl ${t.surface} border p-5 text-center text-xs ${t.muted}`}>
-                  {tx.emptyWardrobeOutfit}
-                </div>
-              ) : (
-                <div
-                  key={outfitAnimKey}
-                  className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 animate-outfit-in"
-                >
-                  {outfitSlots.map((slot) => {
-                    const isLocked = !!lockedSlots[slot.key];
-                    return (
-                      <div
-                        key={slot.key}
-                        className={`rounded-xl ${t.surface} border overflow-hidden flex flex-col transition-all duration-200 hover:-translate-y-0.5 ${
-                          isLocked ? 'border-amber-400/80 ring-1 ring-amber-400/30' : ''
-                        }`}
-                      >
-                        <div className={`px-3 py-2 border-b ${t.border} flex items-center justify-between gap-1`}>
-                          <span className={`text-[11px] font-semibold ${t.subtext} truncate`}>
-                            {slot.label}
-                          </span>
-                          {slot.item && (
-                            <button
-                              type="button"
-                              aria-pressed={isLocked}
-                              onClick={() => toggleLockSlot(slot.key)}
-                              className={`min-h-[28px] min-w-[44px] text-xs px-2.5 py-1 rounded-lg transition cursor-pointer active:scale-95 ${t.focusRing} ${
-                                isLocked ? t.amberLocked : `${t.muted} hover:bg-zinc-500/10`
-                              }`}
-                            >
-                              {isLocked ? tx.locked : tx.lock}
-                            </button>
-                          )}
-                        </div>
-
-                        {slot.item ? (
-                          <div className="flex-1 flex flex-col justify-between">
-                            <div>
-                              <img
-                                src={slot.item.image_url}
-                                alt={slot.item.sub_category || slot.label}
-                                onError={(e) => handleImageError(e, slot.item)}
-                                className="w-full h-36 object-cover"
-                              />
-                              <div className="p-2.5 space-y-1">
-                                <p className="text-xs font-medium truncate">
-                                  {slot.item.sub_category || getCategoryLabel(slot.item.category)}
-                                </p>
-                                <p className={`text-[11px] ${t.muted}`}>
-                                  {slot.item.color ? `${slot.item.color} • ` : ''}
-                                  {tx.warmthShort} {slot.item.warmth_level}/5
-                                </p>
-                              </div>
-                            </div>
-
-                            {!isLocked && (
-                              <div className="px-2.5 pb-2.5">
-                                <button
-                                  type="button"
-                                  onClick={() => regenerateSingleSlot(slot.key)}
-                                  className={`w-full min-h-[36px] rounded-lg ${t.card} border py-1.5 px-3 text-xs font-medium ${t.subtext} transition cursor-pointer active:scale-95 ${t.focusRing}`}
-                                >
-                                  {tx.swap}
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        ) : (
-                          <div className={`flex-1 flex items-center justify-center p-4 text-center text-[11px] ${t.muted} min-h-[160px]`}>
-                            {tx.notFoundInSlot}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          </section>
-        )}
-
-        {/* Wardrobe Insights Panel */}
-        {wardrobeInsights && (
-          <section className={`app-panel rounded-2xl ${t.card} border p-5 flex flex-wrap items-center justify-between gap-4 animate-outfit-in`}>
-            <div className="flex flex-wrap gap-6">
-              <div>
-                <p className={`text-[11px] ${t.muted}`}>{tx.totalItems}</p>
-                <p className="text-lg font-bold">
-                  {wardrobeInsights.total} {tx.piecesUnit}
-                </p>
-              </div>
-              <div>
-                <p className={`text-[11px] ${t.muted}`}>{tx.avgWarmth}</p>
-                <p className="text-lg font-bold">{wardrobeInsights.avgWarmth} / 5</p>
-              </div>
-              <div>
-                <p className={`text-[11px] ${t.muted}`}>{tx.waterproofCount}</p>
-                <p className="text-lg font-bold">
-                  {wardrobeInsights.waterproofCount} {tx.piecesUnit}
-                </p>
-              </div>
-            </div>
-            <p className={`text-xs ${t.subtext} max-w-md`}>{wardrobeInsights.suggestion}</p>
-          </section>
-        )}
-
-        {/* Saved Outfits */}
-        {savedOutfits.length > 0 && (
-          <section className={`app-panel rounded-2xl ${t.card} border p-6 space-y-4 animate-outfit-in`}>
-            <h2 className="text-lg font-semibold">
-              {tx.savedOutfitsTitle} ({savedOutfits.length})
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {savedOutfits.map((saved) => (
-                <div
-                  key={saved.id}
-                  className={`rounded-xl ${t.surface} border p-4 space-y-3 transition hover:-translate-y-0.5`}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <p className={`text-xs ${t.subtext} font-medium`}>
-                      {saved.city} • {saved.temp}°C ({saved.condition}) —{' '}
-                      {formatSavedOutfitDate(saved.createdAt, lang)}
-                    </p>
-                    <div className="flex items-center gap-2">
-                      {saved.outfitData && (
-                        <button
-                          type="button"
-                          onClick={() => handleLoadSavedOutfit(saved)}
-                          className={`min-h-[32px] px-2.5 py-1 rounded-lg text-xs ${t.emeraldText} hover:underline font-medium transition cursor-pointer ${t.focusRing}`}
-                        >
-                          {tx.loadBtn}
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteSavedOutfit(saved.id)}
-                        className={`min-h-[32px] px-2.5 py-1 rounded-lg text-xs ${t.muted} hover:text-red-500 transition cursor-pointer ${t.focusRing}`}
-                      >
-                        {tx.deleteBtn}
-                      </button>
-                    </div>
-                  </div>
-                  <div className="flex gap-2 overflow-x-auto pb-1">
-                    {saved.pieces.map((p, idx) => {
-                      const resolvedPiece = resolvePieceForDisplay(p) || p;
-                      return (
-                        <img
-                          key={`${saved.id}-${idx}`}
-                          src={resolvedPiece.image_url || undefined}
-                          alt={resolvedPiece.sub_category || getCategoryLabel(resolvedPiece.category)}
-                          onError={(e) => handleImageError(e, resolvedPiece)}
-                          className={`w-16 h-20 rounded-lg object-cover border ${t.border} shrink-0`}
-                        />
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {/* Add item form */}
-        <section className={`app-panel rounded-2xl ${t.card} border p-6`}>
-          <h2 className="text-lg font-semibold mb-4">{tx.addNewItemTitle}</h2>
-          <form onSubmit={handleAddItem} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="md:col-span-2 space-y-2.5">
-              <label htmlFor="clothes-file-input" className={`block text-xs ${t.muted}`}>
-                {tx.photoLabel}
-              </label>
-              <input
-                id="clothes-file-input"
-                type="file"
-                accept="image/jpeg,image/png,image/webp,image/gif"
-                onChange={(e) => setImageFile(e.target.files?.[0] || null)}
-                className="sr-only peer"
+              {wardrobeInsights && <WardrobeInsights tx={tx} insights={wardrobeInsights} />}
+              <SavedOutfits
+                tx={tx}
+                lang={lang}
+                savedOutfits={savedOutfits}
+                onLoadSavedOutfit={handleLoadSavedOutfit}
+                onDeleteSavedOutfit={handleDeleteSavedOutfit}
               />
-              <div
-                className={`w-full rounded-xl ${t.surface} border px-3.5 py-2 text-sm flex items-center gap-3 peer-focus-visible:ring-2 ${
-                  isDark ? 'peer-focus-visible:ring-emerald-300' : 'peer-focus-visible:ring-emerald-700'
-                }`}
-              >
-                <label
-                  htmlFor="clothes-file-input"
-                  className={`min-h-[36px] inline-flex items-center rounded-lg ${t.pillActive} px-3 py-1.5 text-xs font-medium cursor-pointer transition active:scale-95 shrink-0`}
-                >
-                  {tx.chooseFileBtn}
-                </label>
-                <span className={`text-xs ${t.muted} truncate`}>
-                  {imageFile ? imageFile.name : tx.noFileChosen}
-                </span>
-              </div>
-              {imagePreviewUrl && (
-                <div className="flex items-center gap-3 pt-1 animate-outfit-in">
-                  <img
-                    src={imagePreviewUrl}
-                    alt={tx.previewAlt}
-                    className={`w-16 h-20 rounded-xl object-cover border ${t.border}`}
-                  />
-                  <span className={`text-xs ${t.muted}`}>{tx.previewReady}</span>
-                </div>
-              )}
-            </div>
-
-            <div>
-              <label htmlFor="item-category" className={`block text-xs ${t.muted} mb-1.5`}>
-                {tx.categoryLabel}
-              </label>
-              <select
-                id="item-category"
-                value={typeof category === 'string' ? category : category?.value}
-                onChange={(e) => setCategory(e.target.value)}
-                className={`w-full rounded-xl ${t.surface} border px-3.5 py-2.5 text-sm ${t.focusRing}`}
-              >
-                {CATEGORIES.map((cat) => (
-                  <option key={cat.value} value={cat.value}>
-                    {cat.label[lang] || cat.label.az}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label htmlFor="item-subcategory" className={`block text-xs ${t.muted} mb-1.5`}>
-                {tx.subCategoryLabel}
-              </label>
-              <input
-                id="item-subcategory"
-                type="text"
-                value={subCategory}
-                onChange={(e) => setSubCategory(e.target.value)}
-                placeholder={tx.subCategoryPlaceholder}
-                className={`w-full rounded-xl ${t.surface} border px-3.5 py-2.5 text-sm ${t.focusRing}`}
-              />
-            </div>
-
-            <div>
-              <label htmlFor="item-color" className={`block text-xs ${t.muted} mb-1.5`}>
-                {tx.colorLabel}
-              </label>
-              <input
-                id="item-color"
-                type="text"
-                value={color}
-                onChange={(e) => setColor(e.target.value)}
-                placeholder={tx.colorPlaceholder}
-                className={`w-full rounded-xl ${t.surface} border px-3.5 py-2.5 text-sm ${t.focusRing}`}
-              />
-            </div>
-
-            <div>
-              <label htmlFor="item-style" className={`block text-xs ${t.muted} mb-1.5`}>
-                {tx.styleLabel}
-              </label>
-              <select
-                id="item-style"
-                value={style}
-                onChange={(e) => setStyle(e.target.value)}
-                className={`w-full rounded-xl ${t.surface} border px-3.5 py-2.5 text-sm ${t.focusRing}`}
-              >
-                {STYLES.map((st) => (
-                  <option key={st.value} value={st.value}>
-                    {st.label[lang] || st.label.az}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="md:col-span-2">
-              <div className={`flex items-center justify-between text-xs ${t.muted} mb-1.5`}>
-                <label htmlFor="item-warmth">{tx.warmthSlider}</label>
-                <span className="font-semibold">{warmthLevel} / 5</span>
-              </div>
-              <input
-                id="item-warmth"
-                type="range"
-                min={1}
-                max={5}
-                value={warmthLevel}
-                onChange={(e) => setWarmthLevel(e.target.value)}
-                className={`w-full cursor-pointer rounded ${t.focusRing}`}
-              />
-            </div>
-
-            <div className="md:col-span-2 flex flex-wrap gap-6 pt-1">
-              <label
-                htmlFor="item-waterproof"
-                className={`min-h-[32px] flex items-center gap-2 text-sm ${t.subtext} cursor-pointer`}
-              >
-                <input
-                  id="item-waterproof"
-                  type="checkbox"
-                  checked={waterproof}
-                  onChange={(e) => setWaterproof(e.target.checked)}
-                  className={`h-4 w-4 rounded ${t.focusRing}`}
-                />
-                {tx.waterproofCheck}
-              </label>
-
-              <label
-                htmlFor="item-windproof"
-                className={`min-h-[32px] flex items-center gap-2 text-sm ${t.subtext} cursor-pointer`}
-              >
-                <input
-                  id="item-windproof"
-                  type="checkbox"
-                  checked={windproof}
-                  onChange={(e) => setWindproof(e.target.checked)}
-                  className={`h-4 w-4 rounded ${t.focusRing}`}
-                />
-                {tx.windproofCheck}
-              </label>
-            </div>
-
-            <div className="md:col-span-2 pt-2">
-              <button
-                type="submit"
-                disabled={uploading}
-                className={`w-full md:w-auto min-h-[44px] rounded-xl ${t.pillActive} disabled:opacity-50 font-semibold px-6 py-2.5 text-sm transition cursor-pointer active:scale-[0.98] ${t.focusRing}`}
-              >
-                {uploading ? tx.uploadingBtn : tx.addToWardrobeBtn}
-              </button>
-            </div>
-          </form>
-        </section>
-
-        {/* Wardrobe list */}
-        <section className="space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-lg font-semibold">
-              {tx.myItemsTitle} ({filteredItems.length})
-            </h2>
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                aria-pressed={selectedCategoryFilter === 'Hamısı'}
-                onClick={() => setSelectedCategoryFilter('Hamısı')}
-                className={`min-h-[36px] rounded-full px-3.5 py-1.5 text-xs font-medium transition cursor-pointer active:scale-95 ${t.focusRing} ${
-                  selectedCategoryFilter === 'Hamısı' ? t.pillActive : `${t.pillIdle} border`
-                }`}
-              >
-                {tx.allFilter}
-              </button>
-
-              {CATEGORIES.map((cat) => (
-                <button
-                  type="button"
-                  key={cat.value}
-                  aria-pressed={selectedCategoryFilter === cat.value}
-                  onClick={() => setSelectedCategoryFilter(cat.value)}
-                  className={`min-h-[36px] rounded-full px-3.5 py-1.5 text-xs font-medium transition cursor-pointer active:scale-95 ${t.focusRing} ${
-                    selectedCategoryFilter === cat.value ? t.pillActive : `${t.pillIdle} border`
-                  }`}
-                >
-                  {cat.label[lang] || cat.label.az}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {loadingItems ? (
-            <p className={`text-sm ${t.muted}`}>{tx.loadingWardrobe}</p>
-          ) : filteredItems.length === 0 ? (
-            <div className={`rounded-2xl ${t.card} border p-8 text-center text-sm ${t.muted}`}>
-              {tx.emptyCategoryMsg}
             </div>
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-              {filteredItems.map((item) => (
-                <div
-                  key={item.id}
-                  className={`rounded-2xl ${t.card} border overflow-hidden flex flex-col justify-between transition-all duration-200 hover:-translate-y-1`}
-                >
-                  <div>
-                    <img
-                      src={item.image_url}
-                      alt={item.sub_category || getCategoryLabel(item.category)}
-                      onError={(e) => handleImageError(e, item)}
-                      className="w-full h-44 object-cover"
-                    />
-                    <div className="p-3.5 space-y-1.5">
-                      <p className="text-xs font-semibold">{getCategoryLabel(item.category)}</p>
-                      {item.sub_category && (
-                        <p className={`text-xs ${t.subtext}`}>{item.sub_category}</p>
-                      )}
-                      <div className="flex flex-wrap gap-1.5 pt-1">
-                        {item.color && (
-                          <span
-                            className={`text-[11px] px-2 py-0.5 rounded-md ${t.surface} border ${t.subtext}`}
-                          >
-                            {item.color}
-                          </span>
-                        )}
-                        <span
-                          className={`text-[11px] px-2 py-0.5 rounded-md ${t.surface} border ${t.subtext}`}
-                        >
-                          {tx.warmthShort}: {item.warmth_level}/5
-                        </span>
-                        {item.waterproof && (
-                          <span className={`text-[11px] px-2 py-0.5 rounded-md font-medium ${t.skyBadge}`}>
-                            {tx.waterproofBadge}
-                          </span>
-                        )}
-                        {item.windproof && (
-                          <span className={`text-[11px] px-2 py-0.5 rounded-md font-medium ${t.tealBadge}`}>
-                            {tx.windproofBadge}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="px-3.5 pb-3">
-                    <button
-                      type="button"
-                      disabled={deletingItemId === item.id}
-                      onClick={() => setPendingDeleteItem(item)}
-                      className={`w-full min-h-[36px] rounded-lg ${t.surface} hover:bg-red-500/15 border hover:border-red-500/30 py-2 text-xs ${t.muted} hover:text-red-500 transition cursor-pointer active:scale-95 disabled:opacity-50 ${t.focusRing}`}
-                    >
-                      {tx.deleteBtn}
-                    </button>
-                  </div>
-                </div>
-              ))}
+            <div id="panel-travel" role="tabpanel" aria-labelledby="tab-travel" className="space-y-8">
+              <TravelPanel
+                tx={tx}
+                lang={lang}
+                travelCityInput={travelCityInput}
+                travelStartDateInput={travelStartDateInput}
+                todayIso={todayIso}
+                maxForecastIso={maxForecastIso}
+                travelDaysInput={travelDaysInput}
+                travelNoteInput={travelNoteInput}
+                savingTravelCity={savingTravelCity}
+                activeTravelPlan={activeTravelPlan}
+                activeTravelDays={activeTravelDays}
+                activeTravelStart={activeTravelStart}
+                activeTravelEnd={activeTravelEnd}
+                coveredStartDate={coveredStartDate}
+                coveredEndDate={coveredEndDate}
+                loadingWeekly={loadingWeekly}
+                weeklyForecastError={weeklyForecastError}
+                weeklyForecast={weeklyForecast}
+                suitcasePlan={suitcasePlan}
+                travelCities={travelCities}
+                onTravelCityInputChange={setTravelCityInput}
+                onTravelStartDateInputChange={setTravelStartDateInput}
+                onTravelDaysInputChange={setTravelDaysInput}
+                onTravelNoteInputChange={setTravelNoteInput}
+                onAddTravelCity={handleAddTravelCity}
+                onSelectSavedTravelCity={handleSelectSavedTravelCity}
+                onRemoveTravelCity={handleRemoveTravelCity}
+              />
             </div>
           )}
-        </section>
-      </div>
 
-      {pendingDeleteItem && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="delete-confirm-title"
-          onClick={() => {
-            if (!deletingItemId) setPendingDeleteItem(null);
-          }}
-        >
-          <div
-            className={`w-full max-w-sm rounded-2xl ${t.card} border p-5 space-y-4 shadow-xl animate-outfit-in`}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center gap-3">
-              {pendingDeleteItem.image_url && (
-                <img
-                  src={pendingDeleteItem.image_url}
-                  alt={pendingDeleteItem.sub_category || getCategoryLabel(pendingDeleteItem.category)}
-                  className={`w-14 h-16 rounded-xl object-cover border ${t.border} shrink-0`}
-                />
-              )}
-              <div>
-                <h3 id="delete-confirm-title" className="text-base font-semibold">
-                  {tx.deleteConfirmTitle}
-                </h3>
-                <p className={`text-xs ${t.muted} mt-0.5`}>
-                  {pendingDeleteItem.sub_category || getCategoryLabel(pendingDeleteItem.category)}
-                  {pendingDeleteItem.color ? ` • ${pendingDeleteItem.color}` : ''}
-                </p>
-              </div>
-            </div>
+          {/* Wardrobe Management Form & Item List */}
+          <div className="space-y-8 pt-4 border-t border-stone-200 dark:border-zinc-800">
+            <WardrobeForm
+              tx={tx}
+              lang={lang}
+              imageFile={imageFile}
+              imagePreviewUrl={imagePreviewUrl}
+              category={category}
+              subCategory={subCategory}
+              color={color}
+              style={style}
+              warmthLevel={warmthLevel}
+              waterproof={waterproof}
+              windproof={windproof}
+              uploading={uploading}
+              fileInputRef={fileInputRef}
+              onImageFileChange={setImageFile}
+              onCategoryChange={setCategory}
+              onSubCategoryChange={setSubCategory}
+              onColorChange={setColor}
+              onStyleChange={setStyle}
+              onWarmthLevelChange={setWarmthLevel}
+              onWaterproofChange={setWaterproof}
+              onWindproofChange={setWindproof}
+              onSubmit={handleAddItem}
+            />
 
-            <p className={`text-xs ${t.subtext} leading-relaxed`}>{tx.deleteConfirmBody}</p>
-
-            <div className="flex items-center justify-end gap-2 pt-1">
-              <button
-                type="button"
-                disabled={!!deletingItemId}
-                onClick={() => setPendingDeleteItem(null)}
-                className={`rounded-xl ${t.surface} border px-4 py-2 text-xs font-medium transition cursor-pointer disabled:opacity-50`}
-              >
-                {tx.cancelBtn}
-              </button>
-              <button
-                type="button"
-                disabled={!!deletingItemId}
-                onClick={() => handleDeleteItem(pendingDeleteItem)}
-                className="rounded-xl bg-red-600 hover:bg-red-700 text-white px-4 py-2 text-xs font-semibold transition cursor-pointer disabled:opacity-50"
-              >
-                {deletingItemId === pendingDeleteItem.id ? tx.deletingBtn : tx.deleteConfirmBtn}
-              </button>
-            </div>
+            <WardrobeList
+              tx={tx}
+              lang={lang}
+              filteredItems={filteredItems}
+              loadingItems={loadingItems}
+              selectedCategoryFilter={selectedCategoryFilter}
+              onSelectCategoryFilter={setSelectedCategoryFilter}
+              pendingDeleteItem={pendingDeleteItem}
+              deletingItemId={deletingItemId}
+              onRequestDeleteItem={handleRequestDeleteItem}
+              onConfirmDeleteItem={handleConfirmDeleteItem}
+              onCancelDeleteItem={handleCancelDeleteItem}
+            />
           </div>
-        </div>
-      )}
-    </main>
+        </main>
+      </div>
+    </div>
   );
 }
