@@ -64,7 +64,3 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 - **Open-Meteo Weather Forecast API** (`https://api.open-meteo.com/v1/forecast`) — current conditions, hourly min/max/rain probability, and 7-day daily forecasts (no API key required).
 - **Open-Meteo Geocoding API** (`https://geocoding-api.open-meteo.com/v1/search`) — worldwide city search by name.
-
-## Screenshots
-
-> Screenshots of the **Today Weather & Outfit**, **Travel Suitcase**, and **Wardrobe** views can be placed under `docs/screenshots/` and linked here.
