@@ -2,6 +2,7 @@
 
 import Image from 'next/image';
 import { CATEGORIES, STYLES } from '@/lib/i18n';
+import { WARDROBE_TEMPLATES } from '@/lib/wardrobe-templates';
 
 const FOCUS_RING =
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-strong focus-visible:ring-offset-2 focus-visible:ring-offset-surface-solid';
@@ -11,6 +12,7 @@ export default function WardrobeForm({
   lang,
   imageFile,
   imagePreviewUrl,
+  selectedTemplate,
   category,
   subCategory,
   color,
@@ -21,6 +23,7 @@ export default function WardrobeForm({
   uploading,
   fileInputRef,
   onImageFileChange,
+  onSelectTemplate,
   onCategoryChange,
   onSubCategoryChange,
   onColorChange,
@@ -30,11 +33,13 @@ export default function WardrobeForm({
   onWindproofChange,
   onSubmit,
 }) {
+  const activePreviewUrl = imagePreviewUrl || selectedTemplate?.imageUrl || '';
+
   return (
     <section className="app-panel rounded-2xl border-2 p-6">
       <h2 className="text-xl font-bold mb-5">{tx.addNewItemTitle}</h2>
       <form onSubmit={onSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="md:col-span-2 space-y-2.5">
+        <div className="md:col-span-2 space-y-3">
           <label htmlFor="clothes-file-input" className="block text-sm font-bold text-text">
             {tx.photoLabel}
           </label>
@@ -54,14 +59,56 @@ export default function WardrobeForm({
               {tx.chooseFileBtn}
             </label>
             <span className="text-sm font-medium text-muted truncate">
-              {imageFile ? imageFile.name : tx.noFileChosen}
+              {imageFile
+                ? imageFile.name
+                : selectedTemplate
+                ? `${selectedTemplate.label[lang] || selectedTemplate.label.az}`
+                : tx.noFileChosen}
             </span>
           </div>
-          {imagePreviewUrl && (
+
+          <div className="space-y-2 pt-1">
+            <p className="text-xs sm:text-sm font-bold text-muted">{tx.templatePickerLabel}</p>
+            <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-7 gap-2.5">
+              {WARDROBE_TEMPLATES.map((tpl) => {
+                const isSelected = selectedTemplate?.id === tpl.id && !imageFile;
+                const label = tpl.label[lang] || tpl.label.az;
+                return (
+                  <button
+                    key={tpl.id}
+                    type="button"
+                    aria-pressed={isSelected}
+                    onClick={() => onSelectTemplate(tpl)}
+                    className={`group flex flex-col items-center gap-1.5 rounded-xl border-2 p-2 transition cursor-pointer active:scale-95 ${FOCUS_RING} ${
+                      isSelected
+                        ? 'bg-brand-soft border-brand text-brand-strong shadow-sm'
+                        : 'bg-surface-2 border-border text-text hover:border-brand/60'
+                    }`}
+                  >
+                    <div className="relative w-12 h-12 rounded-lg overflow-hidden shrink-0">
+                      <Image
+                        src={tpl.imageUrl}
+                        alt={label}
+                        fill
+                        unoptimized
+                        sizes="48px"
+                        className="object-contain"
+                      />
+                    </div>
+                    <span className="text-xs font-bold text-center leading-tight line-clamp-1">
+                      {label}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {activePreviewUrl && (
             <div className="flex items-center gap-3 pt-1 animate-outfit-in">
-              <div className="relative w-16 h-20 rounded-xl overflow-hidden border-2 border-border shrink-0">
+              <div className="relative w-16 h-20 rounded-xl overflow-hidden border-2 border-border bg-surface-2 shrink-0">
                 <Image
-                  src={imagePreviewUrl}
+                  src={activePreviewUrl}
                   alt={tx.previewAlt}
                   fill
                   unoptimized
@@ -69,7 +116,9 @@ export default function WardrobeForm({
                   className="object-cover"
                 />
               </div>
-              <span className="text-sm font-medium text-muted">{tx.previewReady}</span>
+              <span className="text-sm font-semibold text-brand-strong">
+                {imageFile ? tx.previewReady : tx.templateSelectedReady}
+              </span>
             </div>
           )}
         </div>
