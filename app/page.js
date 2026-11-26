@@ -292,6 +292,12 @@ const UI_TEXT = {
     },
     languageGroupLabel: 'Dil seçimi',
     themeGroupLabel: 'Tema seçimi',
+    deleteConfirmTitle: 'Paltarı silmək istəyirsən?',
+    deleteConfirmBody: 'Bu paltar qarderobundan, saxlanmış kombinlərindən və yaddaşdan birdəfəlik silinəcək.',
+    deleteConfirmBtn: 'Bəli, sil',
+    deletingBtn: 'Silinir...',
+    cancelBtn: 'Ləğv et',
+    itemDeletedToast: 'Paltar qarderobdan silindi.',
     slotLabels: {
       top: 'Üst geyim',
       bottom: 'Alt geyim',
@@ -457,6 +463,12 @@ const UI_TEXT = {
     },
     languageGroupLabel: 'Language selection',
     themeGroupLabel: 'Theme selection',
+    deleteConfirmTitle: 'Delete this clothing item?',
+    deleteConfirmBody: 'This item will be permanently removed from your wardrobe, saved outfits, and storage.',
+    deleteConfirmBtn: 'Yes, delete',
+    deletingBtn: 'Deleting...',
+    cancelBtn: 'Cancel',
+    itemDeletedToast: 'Clothing item deleted.',
     slotLabels: {
       top: 'Top',
       bottom: 'Bottom',
@@ -621,6 +633,12 @@ const UI_TEXT = {
     },
     languageGroupLabel: 'Выбор языка',
     themeGroupLabel: 'Выбор темы',
+    deleteConfirmTitle: 'Удалить эту вещь?',
+    deleteConfirmBody: 'Вещь будет навсегда удалена из гардероба, сохраненных образов и хранилища.',
+    deleteConfirmBtn: 'Да, удалить',
+    deletingBtn: 'Удаление...',
+    cancelBtn: 'Отмена',
+    itemDeletedToast: 'Вещь удалена из гардероба.',
     slotLabels: {
       top: 'Верх',
       bottom: 'Низ',
@@ -984,6 +1002,7 @@ function findWorldCityMatch(name, lat, lon) {
   return null;
 }
 
+
 export default function HomePage() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -1022,6 +1041,8 @@ export default function HomePage() {
   const [items, setItems] = useState([]);
   const [loadingItems, setLoadingItems] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [pendingDeleteItem, setPendingDeleteItem] = useState(null);
+  const [deletingItemId, setDeletingItemId] = useState(null);
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('Hamısı');
 
   // Form state for new item
@@ -1119,6 +1140,17 @@ export default function HomePage() {
     const timer = setTimeout(() => setError(''), 6000);
     return () => clearTimeout(timer);
   }, [error]);
+
+  useEffect(() => {
+    if (!pendingDeleteItem) return;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && !deletingItemId) {
+        setPendingDeleteItem(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [pendingDeleteItem, deletingItemId]);
 
   const fetchWeeklyForecast = useCallback(async (lat, lon, startDate, daysCount) => {
     weeklyAbortRef.current?.abort();
@@ -2052,8 +2084,10 @@ export default function HomePage() {
   };
 
   const handleDeleteItem = async (item) => {
-    if (!user) return;
+    if (!user || !item) return;
     setError('');
+    setMessage('');
+    setDeletingItemId(item.id);
     try {
       const { error: deleteError } = await supabase
         .from('wardrobe_items')
@@ -2064,13 +2098,77 @@ export default function HomePage() {
       if (deleteError) throw deleteError;
 
       const storagePath = item.image_path || extractClothesStoragePath(item.image_url);
+      let storageError = null;
       if (storagePath) {
-        await supabase.storage.from(CLOTHES_BUCKET).remove([storagePath]);
+        const res = await supabase.storage.from(CLOTHES_BUCKET).remove([storagePath]);
+        storageError = res.error;
       }
 
       setItems((prev) => prev.filter((i) => i.id !== item.id));
+
+      const slotKeys = ['top', 'bottom', 'outerwear', 'shoes', 'accessory'];
+      setSavedOutfits((prevSaved) => {
+        const cleaned = prevSaved
+          .map((saved) => {
+            const nextPieces = (saved.pieces || []).filter((p) => p.id !== item.id);
+            const nextOutfitData = saved.outfitData
+              ? { ...saved.outfitData }
+              : null;
+            if (nextOutfitData) {
+              for (const key of slotKeys) {
+                if (nextOutfitData[key]?.id === item.id) {
+                  nextOutfitData[key] = null;
+                }
+              }
+            }
+            return {
+              ...saved,
+              pieces: nextPieces,
+              outfitData: nextOutfitData,
+            };
+          })
+          .filter((saved) => saved.pieces.length > 0);
+
+        try {
+          localStorage.setItem(getSavedOutfitsKey(user.id), JSON.stringify(cleaned));
+        } catch {
+          // ignore
+        }
+        return cleaned;
+      });
+
+      setLockedSlots((prevLocks) => {
+        const nextLocks = { ...prevLocks };
+        let changed = false;
+        for (const key of slotKeys) {
+          if (recommendedOutfit?.[key]?.id === item.id && nextLocks[key]) {
+            nextLocks[key] = false;
+            changed = true;
+          }
+        }
+        return changed ? nextLocks : prevLocks;
+      });
+
+      setRecommendedOutfit((prevOutfit) => {
+        if (!prevOutfit) return prevOutfit;
+        let changed = false;
+        const nextOutfit = { ...prevOutfit };
+        for (const key of slotKeys) {
+          if (nextOutfit[key]?.id === item.id) {
+            nextOutfit[key] = null;
+            changed = true;
+          }
+        }
+        return changed ? nextOutfit : prevOutfit;
+      });
+
+      setPendingDeleteItem(null);
+      if (storageError) throw storageError;
+      setMessage(tx.itemDeletedToast);
     } catch (err) {
       setError(err?.message || tx.genericError);
+    } finally {
+      setDeletingItemId(null);
     }
   };
 
@@ -3226,8 +3324,9 @@ export default function HomePage() {
                   <div className="px-3.5 pb-3">
                     <button
                       type="button"
-                      onClick={() => handleDeleteItem(item)}
-                      className={`w-full min-h-[36px] rounded-lg ${t.surface} hover:bg-red-500/15 border hover:border-red-500/30 py-2 text-xs ${t.muted} hover:text-red-500 transition cursor-pointer active:scale-95 ${t.focusRing}`}
+                      disabled={deletingItemId === item.id}
+                      onClick={() => setPendingDeleteItem(item)}
+                      className={`w-full min-h-[36px] rounded-lg ${t.surface} hover:bg-red-500/15 border hover:border-red-500/30 py-2 text-xs ${t.muted} hover:text-red-500 transition cursor-pointer active:scale-95 disabled:opacity-50 ${t.focusRing}`}
                     >
                       {tx.deleteBtn}
                     </button>
@@ -3238,6 +3337,63 @@ export default function HomePage() {
           )}
         </section>
       </div>
+
+      {pendingDeleteItem && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-confirm-title"
+          onClick={() => {
+            if (!deletingItemId) setPendingDeleteItem(null);
+          }}
+        >
+          <div
+            className={`w-full max-w-sm rounded-2xl ${t.card} border p-5 space-y-4 shadow-xl animate-outfit-in`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3">
+              {pendingDeleteItem.image_url && (
+                <img
+                  src={pendingDeleteItem.image_url}
+                  alt={pendingDeleteItem.sub_category || getCategoryLabel(pendingDeleteItem.category)}
+                  className={`w-14 h-16 rounded-xl object-cover border ${t.border} shrink-0`}
+                />
+              )}
+              <div>
+                <h3 id="delete-confirm-title" className="text-base font-semibold">
+                  {tx.deleteConfirmTitle}
+                </h3>
+                <p className={`text-xs ${t.muted} mt-0.5`}>
+                  {pendingDeleteItem.sub_category || getCategoryLabel(pendingDeleteItem.category)}
+                  {pendingDeleteItem.color ? ` • ${pendingDeleteItem.color}` : ''}
+                </p>
+              </div>
+            </div>
+
+            <p className={`text-xs ${t.subtext} leading-relaxed`}>{tx.deleteConfirmBody}</p>
+
+            <div className="flex items-center justify-end gap-2 pt-1">
+              <button
+                type="button"
+                disabled={!!deletingItemId}
+                onClick={() => setPendingDeleteItem(null)}
+                className={`rounded-xl ${t.surface} border px-4 py-2 text-xs font-medium transition cursor-pointer disabled:opacity-50`}
+              >
+                {tx.cancelBtn}
+              </button>
+              <button
+                type="button"
+                disabled={!!deletingItemId}
+                onClick={() => handleDeleteItem(pendingDeleteItem)}
+                className="rounded-xl bg-red-600 hover:bg-red-700 text-white px-4 py-2 text-xs font-semibold transition cursor-pointer disabled:opacity-50"
+              >
+                {deletingItemId === pendingDeleteItem.id ? tx.deletingBtn : tx.deleteConfirmBtn}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
