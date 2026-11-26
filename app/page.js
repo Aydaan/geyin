@@ -1050,7 +1050,7 @@ export default function Home() {
         {/* Header with App Title, Language/Theme Toggles, and Logout */}
         <header className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-border">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight bg-gradient-to-r from-brand-strong to-brand bg-clip-text text-transparent">
+            <h1 className="text-2xl font-bold tracking-tight text-brand-strong">
               Geyin
             </h1>
             <p className="text-xs text-muted mt-0.5">{user.email}</p>
@@ -1124,7 +1124,7 @@ export default function Home() {
             className={`min-h-[40px] px-4 py-2 text-xs font-semibold rounded-xl transition cursor-pointer active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-strong ${
               activeTab === 'today'
                 ? 'bg-brand text-brand-fg shadow-sm'
-                : 'text-muted hover:text-text'
+                : 'text-muted hover:text-text hover:bg-surface-muted/60'
             }`}
           >
             {tx.tabToday}
@@ -1139,7 +1139,7 @@ export default function Home() {
             className={`min-h-[40px] px-4 py-2 text-xs font-semibold rounded-xl transition cursor-pointer active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-strong ${
               activeTab === 'travel'
                 ? 'bg-brand text-brand-fg shadow-sm'
-                : 'text-muted hover:text-text'
+                : 'text-muted hover:text-text hover:bg-surface-muted/60'
             }`}
           >
             {tx.tabTravel}

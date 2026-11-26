@@ -114,7 +114,7 @@ export default function WardrobeList({
                     type="button"
                     disabled={deletingItemId === item.id}
                     onClick={() => onRequestDeleteItem(item)}
-                    className={`w-full min-h-[36px] rounded-lg bg-surface-2 border-border hover:bg-red-500/15 border hover:border-red-500/30 py-2 text-xs text-muted hover:text-red-500 transition cursor-pointer active:scale-95 disabled:opacity-50 ${FOCUS_RING}`}
+                    className={`w-full min-h-[36px] rounded-lg bg-surface-2 border-border hover:bg-red-500/15 border hover:border-red-500/30 py-2 text-xs text-muted hover:text-red-600 dark:hover:text-red-400 transition cursor-pointer active:scale-95 disabled:opacity-50 ${FOCUS_RING}`}
                   >
                     {tx.deleteBtn}
                   </button>

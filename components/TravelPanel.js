@@ -139,7 +139,7 @@ export default function TravelPanel({
           {loadingWeekly ? (
             <p className="text-xs text-muted">{tx.checkingWeather}</p>
           ) : weeklyForecastError ? (
-            <p role="alert" className="text-xs text-red-500">
+            <p role="alert" className="text-xs text-red-600 dark:text-red-400">
               {weeklyForecastError}
             </p>
           ) : weeklyForecast.length === 0 ? (
@@ -263,7 +263,7 @@ export default function TravelPanel({
                   <button
                     type="button"
                     onClick={() => onRemoveTravelCity(c.id)}
-                    className={`min-h-[32px] rounded-lg px-2.5 py-1 text-xs text-muted hover:text-red-500 cursor-pointer transition ${FOCUS_RING}`}
+                    className={`min-h-[32px] rounded-lg px-2.5 py-1 text-xs text-muted hover:text-red-600 dark:hover:text-red-400 cursor-pointer transition ${FOCUS_RING}`}
                   >
                     {tx.removeCityBtn}
                   </button>
