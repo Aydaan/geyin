@@ -1,11 +1,11 @@
-'use client';
+﻿'use client';
 
 import Image from 'next/image';
 import { getCategoryLabel } from '@/lib/i18n';
 import { formatForecastDate } from '@/lib/weather';
 
 const FOCUS_RING =
-  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-700 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-emerald-300 dark:focus-visible:ring-offset-zinc-900';
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-strong focus-visible:ring-offset-2 focus-visible:ring-offset-surface-solid';
 
 export default function TravelPanel({
   tx,
@@ -37,10 +37,10 @@ export default function TravelPanel({
   onRemoveTravelCity,
 }) {
   return (
-    <section className="app-panel rounded-2xl bg-gradient-to-br from-white via-stone-50 to-amber-50/60 border-stone-200 shadow-sm dark:from-zinc-900 dark:via-zinc-900 dark:to-zinc-800/80 dark:border-zinc-800 dark:shadow-none border p-6 space-y-6 animate-outfit-in">
+    <section className="app-panel rounded-2xl border p-6 space-y-6 animate-outfit-in">
       <div>
         <h2 className="text-xl font-bold">{tx.travelTitle}</h2>
-        <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-1">{tx.travelSubtitle}</p>
+        <p className="text-xs text-muted mt-1">{tx.travelSubtitle}</p>
       </div>
 
       <form onSubmit={onAddTravelCity} className="grid grid-cols-1 md:grid-cols-6 gap-3">
@@ -55,13 +55,13 @@ export default function TravelPanel({
             value={travelCityInput}
             onChange={(e) => onTravelCityInputChange(e.target.value)}
             placeholder={tx.travelInputPlaceholder}
-            className={`w-full rounded-xl bg-stone-50 border-stone-200 dark:bg-zinc-950 dark:border-zinc-800 border px-3.5 py-2.5 text-xs ${FOCUS_RING}`}
+            className={`w-full rounded-xl bg-surface-2 border-border text-text border px-3.5 py-2.5 text-xs ${FOCUS_RING}`}
           />
         </div>
         <div>
           <label
             htmlFor="travel-start-date-input"
-            className="block text-[11px] text-zinc-600 dark:text-zinc-400 mb-1"
+            className="block text-[11px] text-muted mb-1"
           >
             {tx.travelStartDateLabel}
           </label>
@@ -72,13 +72,13 @@ export default function TravelPanel({
             max={maxForecastIso}
             value={travelStartDateInput}
             onChange={(e) => onTravelStartDateInputChange(e.target.value)}
-            className={`w-full rounded-xl bg-stone-50 border-stone-200 dark:bg-zinc-950 dark:border-zinc-800 border px-3 py-2 text-xs ${FOCUS_RING}`}
+            className={`w-full rounded-xl bg-surface-2 border-border text-text border px-3 py-2 text-xs ${FOCUS_RING}`}
           />
         </div>
         <div>
           <label
             htmlFor="travel-days-input"
-            className="block text-[11px] text-zinc-600 dark:text-zinc-400 mb-1"
+            className="block text-[11px] text-muted mb-1"
           >
             {tx.travelDaysLabel}
           </label>
@@ -89,14 +89,14 @@ export default function TravelPanel({
             max={14}
             value={travelDaysInput}
             onChange={(e) => onTravelDaysInputChange(e.target.value)}
-            className={`w-full rounded-xl bg-stone-50 border-stone-200 dark:bg-zinc-950 dark:border-zinc-800 border px-3.5 py-2 text-xs ${FOCUS_RING}`}
+            className={`w-full rounded-xl bg-surface-2 border-border text-text border px-3.5 py-2 text-xs ${FOCUS_RING}`}
           />
         </div>
         <div className="md:col-span-2 flex items-end">
           <button
             type="submit"
             disabled={savingTravelCity}
-            className={`w-full min-h-[42px] rounded-xl bg-zinc-900 text-white dark:bg-white dark:text-zinc-950 disabled:opacity-50 px-4 py-2.5 text-xs font-semibold transition cursor-pointer active:scale-95 ${FOCUS_RING}`}
+            className={`w-full min-h-[42px] rounded-xl bg-brand hover:bg-brand-strong text-brand-fg disabled:opacity-50 px-4 py-2.5 text-xs font-semibold transition cursor-pointer active:scale-95 ${FOCUS_RING}`}
           >
             {savingTravelCity ? tx.searching : tx.travelSaveBtn}
           </button>
@@ -111,20 +111,20 @@ export default function TravelPanel({
             value={travelNoteInput}
             onChange={(e) => onTravelNoteInputChange(e.target.value)}
             placeholder={tx.travelNotePlaceholder}
-            className={`w-full rounded-xl bg-stone-50 border-stone-200 dark:bg-zinc-950 dark:border-zinc-800 border px-3.5 py-2.5 text-xs ${FOCUS_RING}`}
+            className={`w-full rounded-xl bg-surface-2 border-border text-text border px-3.5 py-2.5 text-xs ${FOCUS_RING}`}
           />
         </div>
       </form>
 
       {/* Trip Forecast */}
       {activeTravelPlan && (
-        <div className="space-y-3 pt-4 border-t border-stone-200 dark:border-zinc-800">
+        <div className="space-y-3 pt-4 border-t border-border">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <h3 className="text-sm font-semibold">
                 {tx.weeklyForecastTitle} — {activeTravelPlan.label} ({activeTravelDays} {tx.daysUnit})
               </h3>
-              <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">
+              <p className="text-[11px] text-muted mt-0.5">
                 {activeTravelStart} – {activeTravelEnd}
                 {coveredStartDate && coveredEndDate
                   ? ` • ${tx.forecastDaysIncluded}: ${coveredStartDate} – ${coveredEndDate} (${weeklyForecast.length}/${activeTravelDays} ${tx.daysUnit})`
@@ -132,18 +132,18 @@ export default function TravelPanel({
               </p>
             </div>
             {activeTravelPlan.note && (
-              <span className="text-xs text-zinc-500 dark:text-zinc-400">{activeTravelPlan.note}</span>
+              <span className="text-xs text-muted">{activeTravelPlan.note}</span>
             )}
           </div>
 
           {loadingWeekly ? (
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">{tx.checkingWeather}</p>
+            <p className="text-xs text-muted">{tx.checkingWeather}</p>
           ) : weeklyForecastError ? (
             <p role="alert" className="text-xs text-red-500">
               {weeklyForecastError}
             </p>
           ) : weeklyForecast.length === 0 ? (
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">{tx.forecastOutOfRange}</p>
+            <p className="text-xs text-muted">{tx.forecastOutOfRange}</p>
           ) : (
             <>
               {weeklyForecast.length < activeTravelDays && (
@@ -153,9 +153,9 @@ export default function TravelPanel({
                 {weeklyForecast.map((day) => (
                   <div
                     key={day.date}
-                    className="rounded-xl bg-white dark:bg-zinc-900 border-stone-200 dark:border-zinc-800 border p-3 text-center space-y-1"
+                    className="rounded-xl bg-surface-solid border-border border p-3 text-center space-y-1"
                   >
-                    <p className="text-[11px] font-semibold text-zinc-700 dark:text-zinc-300">
+                    <p className="text-[11px] font-semibold text-muted">
                       {formatForecastDate(day.date, lang)}
                     </p>
                     <p className="text-sm font-bold">
@@ -174,32 +174,32 @@ export default function TravelPanel({
 
       {/* Suitcase Items */}
       {activeTravelPlan && (
-        <div className="space-y-3 pt-4 border-t border-stone-200 dark:border-zinc-800">
+        <div className="space-y-3 pt-4 border-t border-border">
           <div>
             <h3 className="text-sm font-semibold">{tx.suitcaseTitle}</h3>
-            <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+            <p className="text-xs text-muted mt-0.5">
               {activeTravelDays} {tx.suitcaseSummary}
               {coveredStartDate && coveredEndDate
                 ? ` (${coveredStartDate} – ${coveredEndDate}, ${weeklyForecast.length}/${activeTravelDays} ${tx.daysUnit})`
                 : ''}
             </p>
             {suitcasePlan.note && (
-              <p className="text-xs font-medium text-emerald-800 dark:text-emerald-300 mt-1">
+              <p className="text-xs font-medium text-brand-strong mt-1">
                 {suitcasePlan.note}
               </p>
             )}
           </div>
 
           {suitcasePlan.suggestedItems.length === 0 ? (
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">{tx.emptySuitcaseMsg}</p>
+            <p className="text-xs text-muted">{tx.emptySuitcaseMsg}</p>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
               {suitcasePlan.suggestedItems.map((piece) => (
                 <div
                   key={piece.id}
-                  className="rounded-xl bg-white dark:bg-zinc-900 border-stone-200 dark:border-zinc-800 border overflow-hidden flex flex-col"
+                  className="rounded-xl bg-surface-solid border-border border overflow-hidden flex flex-col"
                 >
-                  <div className="relative w-full h-32 bg-stone-100 dark:bg-zinc-800">
+                  <div className="relative w-full h-32 bg-surface-muted">
                     {piece.image_url ? (
                       <Image
                         src={piece.image_url}
@@ -210,7 +210,7 @@ export default function TravelPanel({
                         className="object-cover"
                       />
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center text-xs text-zinc-400">
+                      <div className="w-full h-full flex items-center justify-center text-xs text-muted">
                         {tx.notFoundInSlot}
                       </div>
                     )}
@@ -222,7 +222,7 @@ export default function TravelPanel({
                     <p className="text-xs font-medium truncate">
                       {piece.sub_category || piece.color || '-'}
                     </p>
-                    <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                    <p className="text-[11px] text-muted">
                       {tx.warmthShort} {piece.warmth_level}/5
                       {piece.waterproof ? ` • ${tx.waterproofBadge}` : ''}
                     </p>
@@ -235,35 +235,35 @@ export default function TravelPanel({
       )}
 
       {/* Saved Travel Cities */}
-      <div className="space-y-3 pt-4 border-t border-stone-200 dark:border-zinc-800">
+      <div className="space-y-3 pt-4 border-t border-border">
         <h3 className="text-sm font-semibold">{tx.travelSavedListTitle}</h3>
         {travelCities.length === 0 ? (
-          <p className="text-xs text-zinc-500 dark:text-zinc-400">{tx.travelEmptyMsg}</p>
+          <p className="text-xs text-muted">{tx.travelEmptyMsg}</p>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {travelCities.map((c) => (
               <div
                 key={c.id}
-                className="rounded-xl bg-white dark:bg-zinc-900 border-stone-200 dark:border-zinc-800 border p-3.5 flex items-center justify-between gap-3"
+                className="rounded-xl bg-surface-solid border-border border p-3.5 flex items-center justify-between gap-3"
               >
                 <div>
                   <p className="text-xs font-semibold">
                     {c.label} • {c.startDate ? `${c.startDate} • ` : ''}{c.days || 3} {tx.daysUnit}
                   </p>
-                  {c.note && <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">{c.note}</p>}
+                  {c.note && <p className="text-[11px] text-muted mt-0.5">{c.note}</p>}
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <button
                     type="button"
                     onClick={() => onSelectSavedTravelCity(c)}
-                    className={`min-h-[32px] rounded-lg px-3 py-1 text-xs font-medium cursor-pointer transition active:scale-95 bg-emerald-700 text-white dark:bg-emerald-600 ${FOCUS_RING}`}
+                    className={`min-h-[32px] rounded-lg px-3 py-1 text-xs font-medium cursor-pointer transition active:scale-95 bg-brand hover:bg-brand-strong text-brand-fg ${FOCUS_RING}`}
                   >
                     {tx.useCityBtn}
                   </button>
                   <button
                     type="button"
                     onClick={() => onRemoveTravelCity(c.id)}
-                    className={`min-h-[32px] rounded-lg px-2.5 py-1 text-xs text-zinc-500 hover:text-red-500 cursor-pointer transition ${FOCUS_RING}`}
+                    className={`min-h-[32px] rounded-lg px-2.5 py-1 text-xs text-muted hover:text-red-500 cursor-pointer transition ${FOCUS_RING}`}
                   >
                     {tx.removeCityBtn}
                   </button>

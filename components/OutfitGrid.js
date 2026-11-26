@@ -1,10 +1,10 @@
-'use client';
+﻿'use client';
 
 import Image from 'next/image';
 import { STYLES, getCategoryLabel } from '@/lib/i18n';
 
 const FOCUS_RING =
-  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-700 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-emerald-300 dark:focus-visible:ring-offset-zinc-900';
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-strong focus-visible:ring-offset-2 focus-visible:ring-offset-surface-solid';
 
 export default function OutfitGrid({
   tx,
@@ -37,16 +37,16 @@ export default function OutfitGrid({
     : [];
 
   return (
-    <div className="space-y-4 pt-2 border-t border-stone-200 dark:border-zinc-800">
+    <div className="space-y-4 pt-2 border-t border-border">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h3 className="text-base font-semibold">{tx.todayOutfitTitle}</h3>
           {displayedOutfitExplanation || recommendedOutfit?.explanation ? (
-            <p className="text-xs font-medium text-emerald-800 dark:text-emerald-300 mt-0.5">
+            <p className="text-xs font-medium text-brand-strong mt-0.5">
               {tx.whyOutfit} {displayedOutfitExplanation || recommendedOutfit.explanation}
             </p>
           ) : (
-            <p className="text-xs text-zinc-600 dark:text-zinc-400">{tx.defaultOutfitSub}</p>
+            <p className="text-xs text-muted">{tx.defaultOutfitSub}</p>
           )}
         </div>
 
@@ -58,7 +58,7 @@ export default function OutfitGrid({
             id="outfit-style-select"
             value={outfitStyleFilter}
             onChange={(e) => onStyleFilterChange(e.target.value)}
-            className={`rounded-xl bg-stone-50 border-stone-200 dark:bg-zinc-950 dark:border-zinc-800 border px-3 py-2 text-xs ${FOCUS_RING}`}
+            className={`rounded-xl bg-surface-2 border-border text-text border px-3 py-2 text-xs ${FOCUS_RING}`}
           >
             <option value="all">{tx.allStyles}</option>
             {STYLES.map((st) => (
@@ -72,7 +72,7 @@ export default function OutfitGrid({
             type="button"
             disabled={!activeWeather || items.length === 0}
             onClick={onRegenerateOutfit}
-            className={`min-h-[38px] rounded-xl bg-white border-stone-200 shadow-sm dark:bg-zinc-900 dark:border-zinc-800 dark:shadow-none disabled:opacity-40 border px-3.5 py-2 text-xs font-medium transition cursor-pointer active:scale-95 ${FOCUS_RING}`}
+            className={`min-h-[38px] rounded-xl bg-surface-solid border-border text-text shadow-sm dark:shadow-none disabled:opacity-40 border px-3.5 py-2 text-xs font-medium transition cursor-pointer active:scale-95 ${FOCUS_RING}`}
           >
             {tx.generateAnother}
           </button>
@@ -81,7 +81,7 @@ export default function OutfitGrid({
             type="button"
             disabled={!recommendedOutfit}
             onClick={onSaveCurrentOutfit}
-            className={`min-h-[38px] rounded-xl disabled:opacity-40 border px-3.5 py-2 text-xs font-medium transition cursor-pointer active:scale-95 bg-emerald-100 hover:bg-emerald-200 border-emerald-400 text-emerald-900 dark:bg-emerald-500/20 dark:hover:bg-emerald-500/30 dark:border-emerald-400/40 dark:text-emerald-300 ${FOCUS_RING}`}
+            className={`min-h-[38px] rounded-xl disabled:opacity-40 border px-3.5 py-2 text-xs font-medium transition cursor-pointer active:scale-95 bg-brand-soft hover:opacity-90 border-brand/40 text-brand-strong ${FOCUS_RING}`}
           >
             {tx.saveOutfit}
           </button>
@@ -89,7 +89,7 @@ export default function OutfitGrid({
       </div>
 
       {items.length === 0 ? (
-        <div className="rounded-xl bg-stone-50 border-stone-200 dark:bg-zinc-950 dark:border-zinc-800 border p-5 text-center text-xs text-zinc-600 dark:text-zinc-400">
+        <div className="rounded-xl bg-surface-2 border-border border p-5 text-center text-xs text-muted">
           {tx.emptyWardrobeOutfit}
         </div>
       ) : (
@@ -102,12 +102,12 @@ export default function OutfitGrid({
             return (
               <div
                 key={slot.key}
-                className={`rounded-xl bg-stone-50 border-stone-200 dark:bg-zinc-950 dark:border-zinc-800 border overflow-hidden flex flex-col transition-all duration-200 hover:-translate-y-0.5 ${
+                className={`rounded-xl bg-surface-2 border-border border overflow-hidden flex flex-col transition-all duration-200 hover:-translate-y-0.5 ${
                   isLocked ? 'border-amber-400/80 ring-1 ring-amber-400/30' : ''
                 }`}
               >
-                <div className="px-3 py-2 border-b border-stone-200 dark:border-zinc-800 flex items-center justify-between gap-1">
-                  <span className="text-[11px] font-semibold text-zinc-700 dark:text-zinc-300 truncate">
+                <div className="px-3 py-2 border-b border-border flex items-center justify-between gap-1">
+                  <span className="text-[11px] font-semibold text-text truncate">
                     {slot.label}
                   </span>
                   {slot.item && (
@@ -118,7 +118,7 @@ export default function OutfitGrid({
                       className={`min-h-[28px] min-w-[44px] text-xs px-2.5 py-1 rounded-lg transition cursor-pointer active:scale-95 ${FOCUS_RING} ${
                         isLocked
                           ? 'bg-amber-100 text-amber-900 border border-amber-300 font-semibold dark:bg-amber-400/20 dark:text-amber-300 dark:border-transparent'
-                          : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-500/10'
+                          : 'text-muted hover:bg-zinc-500/10'
                       }`}
                     >
                       {isLocked ? tx.locked : tx.lock}
@@ -143,7 +143,7 @@ export default function OutfitGrid({
                         <p className="text-xs font-medium truncate">
                           {slot.item.sub_category || getCategoryLabel(slot.item.category, lang)}
                         </p>
-                        <p className="text-[11px] text-zinc-600 dark:text-zinc-400">
+                        <p className="text-[11px] text-muted">
                           {slot.item.color ? `${slot.item.color} • ` : ''}
                           {tx.warmthShort} {slot.item.warmth_level}/5
                         </p>
@@ -155,7 +155,7 @@ export default function OutfitGrid({
                         <button
                           type="button"
                           onClick={() => onRegenerateSingleSlot(slot.key)}
-                          className={`w-full min-h-[36px] rounded-lg bg-white border-stone-200 shadow-sm dark:bg-zinc-900 dark:border-zinc-800 dark:shadow-none border py-1.5 px-3 text-xs font-medium text-zinc-700 dark:text-zinc-300 transition cursor-pointer active:scale-95 ${FOCUS_RING}`}
+                          className={`w-full min-h-[36px] rounded-lg bg-surface-solid border-border shadow-sm dark:shadow-none border py-1.5 px-3 text-xs font-medium text-text transition cursor-pointer active:scale-95 ${FOCUS_RING}`}
                         >
                           {tx.swap}
                         </button>
@@ -163,7 +163,7 @@ export default function OutfitGrid({
                     )}
                   </div>
                 ) : (
-                  <div className="flex-1 flex items-center justify-center p-4 text-center text-[11px] text-zinc-600 dark:text-zinc-400 min-h-[160px]">
+                  <div className="flex-1 flex items-center justify-center p-4 text-center text-[11px] text-muted min-h-[160px]">
                     {tx.notFoundInSlot}
                   </div>
                 )}

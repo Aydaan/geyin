@@ -1,7 +1,7 @@
 'use client';
 
 const FOCUS_RING =
-  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-700 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-emerald-300 dark:focus-visible:ring-offset-zinc-900';
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-strong focus-visible:ring-offset-2 focus-visible:ring-offset-bg';
 
 export default function TopControls({ lang, onSelectLang, themeMode, onSelectTheme, tx }) {
   return (
@@ -9,7 +9,7 @@ export default function TopControls({ lang, onSelectLang, themeMode, onSelectThe
       <div
         role="group"
         aria-label={tx.languageGroupLabel}
-        className="inline-flex items-center rounded-xl p-1 border text-xs bg-stone-200/70 border-stone-300 dark:bg-zinc-900 dark:border-zinc-800"
+        className="inline-flex items-center rounded-xl p-1 border text-xs bg-surface-muted border-border"
       >
         {[
           { id: 'az', label: 'AZ' },
@@ -23,8 +23,8 @@ export default function TopControls({ lang, onSelectLang, themeMode, onSelectThe
             onClick={() => onSelectLang(l.id)}
             className={`min-h-[32px] min-w-[36px] px-2.5 py-1 rounded-lg font-semibold transition cursor-pointer active:scale-95 ${FOCUS_RING} ${
               lang === l.id
-                ? 'bg-emerald-700 text-white shadow-xs'
-                : 'text-zinc-600 dark:text-zinc-400'
+                ? 'bg-brand text-brand-fg shadow-xs'
+                : 'text-muted hover:text-text'
             }`}
           >
             {l.label}
@@ -35,7 +35,7 @@ export default function TopControls({ lang, onSelectLang, themeMode, onSelectThe
       <div
         role="group"
         aria-label={tx.themeGroupLabel}
-        className="inline-flex items-center rounded-xl p-1 border text-xs bg-stone-200/70 border-stone-300 dark:bg-zinc-900 dark:border-zinc-800"
+        className="inline-flex items-center rounded-xl p-1 border text-xs bg-surface-muted border-border"
       >
         {[
           { id: 'auto', label: tx.auto },
@@ -49,8 +49,8 @@ export default function TopControls({ lang, onSelectLang, themeMode, onSelectThe
             onClick={() => onSelectTheme(m.id)}
             className={`min-h-[32px] px-2.5 py-1 rounded-lg font-medium transition cursor-pointer active:scale-95 ${FOCUS_RING} ${
               themeMode === m.id
-                ? 'bg-white text-zinc-900 dark:text-zinc-950 shadow-xs'
-                : 'text-zinc-600 dark:text-zinc-400'
+                ? 'bg-brand text-brand-fg shadow-xs'
+                : 'text-muted hover:text-text'
             }`}
           >
             {m.label}

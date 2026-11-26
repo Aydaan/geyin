@@ -1,10 +1,10 @@
-'use client';
+﻿'use client';
 
 import Image from 'next/image';
 import { getCategoryLabel } from '@/lib/i18n';
 
 const FOCUS_RING =
-  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-700 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-emerald-300 dark:focus-visible:ring-offset-zinc-900';
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-strong focus-visible:ring-offset-2 focus-visible:ring-offset-surface-solid';
 
 const SAVED_DATE_LOCALES = {
   az: 'az-AZ',
@@ -40,7 +40,7 @@ export default function SavedOutfits({
   if (!savedOutfits || savedOutfits.length === 0) return null;
 
   return (
-    <section className="app-panel rounded-2xl bg-white border-stone-200 shadow-sm dark:bg-zinc-900 dark:border-zinc-800 dark:shadow-none border p-6 space-y-4 animate-outfit-in">
+    <section className="app-panel rounded-2xl border p-6 space-y-4 animate-outfit-in">
       <h2 className="text-lg font-semibold">
         {tx.savedOutfitsTitle} ({savedOutfits.length})
       </h2>
@@ -48,10 +48,10 @@ export default function SavedOutfits({
         {savedOutfits.map((saved) => (
           <div
             key={saved.id}
-            className="rounded-xl bg-stone-50 border-stone-200 dark:bg-zinc-950 dark:border-zinc-800 border p-4 space-y-3 transition hover:-translate-y-0.5"
+            className="rounded-xl bg-surface-2 border-border border p-4 space-y-3 transition hover:-translate-y-0.5"
           >
             <div className="flex items-center justify-between gap-2">
-              <p className="text-xs text-zinc-700 dark:text-zinc-300 font-medium">
+              <p className="text-xs text-text font-medium">
                 {saved.city} • {saved.temp}°C ({saved.condition}) —{' '}
                 {formatSavedOutfitDate(saved.createdAt, lang)}
               </p>
@@ -60,7 +60,7 @@ export default function SavedOutfits({
                   <button
                     type="button"
                     onClick={() => onLoadSavedOutfit(saved)}
-                    className={`min-h-[32px] px-2.5 py-1 rounded-lg text-xs text-emerald-800 dark:text-emerald-300 hover:underline font-medium transition cursor-pointer ${FOCUS_RING}`}
+                    className={`min-h-[32px] px-2.5 py-1 rounded-lg text-xs text-brand-strong hover:underline font-medium transition cursor-pointer ${FOCUS_RING}`}
                   >
                     {tx.loadBtn}
                   </button>
@@ -68,7 +68,7 @@ export default function SavedOutfits({
                 <button
                   type="button"
                   onClick={() => onDeleteSavedOutfit(saved.id)}
-                  className={`min-h-[32px] px-2.5 py-1 rounded-lg text-xs text-zinc-600 dark:text-zinc-400 hover:text-red-500 transition cursor-pointer ${FOCUS_RING}`}
+                  className={`min-h-[32px] px-2.5 py-1 rounded-lg text-xs text-muted hover:text-red-500 transition cursor-pointer ${FOCUS_RING}`}
                 >
                   {tx.deleteBtn}
                 </button>
@@ -78,7 +78,7 @@ export default function SavedOutfits({
               {saved.pieces.map((p, idx) => (
                 <div
                   key={`${saved.id}-${idx}`}
-                  className="relative w-16 h-20 rounded-lg overflow-hidden border border-stone-200 dark:border-zinc-800 shrink-0"
+                  className="relative w-16 h-20 rounded-lg overflow-hidden border border-border shrink-0"
                 >
                   <Image
                     src={p.image_url}

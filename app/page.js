@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useState, useCallback, useMemo, useRef, useSyncExternalStore } from 'react';
 import { supabase } from '@/lib/supabase';
@@ -123,12 +123,10 @@ export default function Home() {
 
   useEffect(() => {
     if (typeof document !== 'undefined') {
+      const nextTheme = isDark ? 'dark' : 'light';
       document.documentElement.lang = lang;
-      if (isDark) {
-        document.documentElement.setAttribute('data-theme', 'dark');
-      } else {
-        document.documentElement.removeAttribute('data-theme');
-      }
+      document.documentElement.setAttribute('data-theme', nextTheme);
+      document.documentElement.style.colorScheme = nextTheme;
     }
   }, [lang, isDark]);
 
@@ -917,7 +915,7 @@ export default function Home() {
 
   if (!authChecked) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-stone-50 text-zinc-600 dark:bg-zinc-950 dark:text-zinc-400">
+      <div className="min-h-screen flex items-center justify-center bg-bg text-muted">
         <p className="text-sm font-medium animate-pulse">{tx.loading}</p>
       </div>
     );
@@ -926,7 +924,6 @@ export default function Home() {
   if (!user) {
     return (
       <AuthForm
-        isDark={isDark}
         tx={tx}
         lang={lang}
         themeMode={themeMode}
@@ -953,15 +950,15 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-[#f5f4ef] text-[#242a25] dark:bg-[#111513] dark:text-[#f3f4f1] transition-colors duration-200">
+    <div className="min-h-screen bg-bg text-text transition-colors duration-200">
       <div className="mx-auto max-w-6xl px-4 sm:px-6 py-8 space-y-8">
         {/* Header with App Title, Language/Theme Toggles, and Logout */}
-        <header className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-stone-200 dark:border-zinc-800">
+        <header className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-border">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight bg-gradient-to-r from-emerald-800 to-teal-700 dark:from-emerald-300 dark:to-teal-200 bg-clip-text text-transparent">
+            <h1 className="text-2xl font-bold tracking-tight bg-gradient-to-r from-brand-strong to-brand bg-clip-text text-transparent">
               Geyin
             </h1>
-            <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-0.5">{user.email}</p>
+            <p className="text-xs text-muted mt-0.5">{user.email}</p>
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
@@ -976,7 +973,7 @@ export default function Home() {
             <button
               type="button"
               onClick={handleLogout}
-              className="min-h-[36px] rounded-xl bg-white border-stone-200 shadow-sm dark:bg-zinc-900 dark:border-zinc-800 dark:shadow-none hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40 dark:hover:text-red-400 border px-3.5 py-1.5 text-xs font-medium transition cursor-pointer active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+              className="min-h-[36px] rounded-xl bg-surface-solid border-border text-text shadow-sm dark:shadow-none hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40 dark:hover:text-red-400 border px-3.5 py-1.5 text-xs font-medium transition cursor-pointer active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
             >
               {tx.logout}
             </button>
@@ -1020,7 +1017,7 @@ export default function Home() {
         <nav
           role="tablist"
           aria-label="App Navigation"
-          className="flex space-x-2 border-b border-stone-200 dark:border-zinc-800 pb-2"
+          className="flex space-x-2 border-b border-border pb-2"
         >
           <button
             type="button"
@@ -1029,10 +1026,10 @@ export default function Home() {
             aria-selected={activeTab === 'today'}
             aria-controls="panel-today"
             onClick={() => setActiveTab('today')}
-            className={`min-h-[40px] px-4 py-2 text-xs font-semibold rounded-xl transition cursor-pointer active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-700 dark:focus-visible:ring-emerald-300 ${
+            className={`min-h-[40px] px-4 py-2 text-xs font-semibold rounded-xl transition cursor-pointer active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-strong ${
               activeTab === 'today'
-                ? 'bg-zinc-900 text-white dark:bg-white dark:text-zinc-950 shadow-sm'
-                : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
+                ? 'bg-brand text-brand-fg shadow-sm'
+                : 'text-muted hover:text-text'
             }`}
           >
             {tx.tabToday}
@@ -1044,10 +1041,10 @@ export default function Home() {
             aria-selected={activeTab === 'travel'}
             aria-controls="panel-travel"
             onClick={() => setActiveTab('travel')}
-            className={`min-h-[40px] px-4 py-2 text-xs font-semibold rounded-xl transition cursor-pointer active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-700 dark:focus-visible:ring-emerald-300 ${
+            className={`min-h-[40px] px-4 py-2 text-xs font-semibold rounded-xl transition cursor-pointer active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-strong ${
               activeTab === 'travel'
-                ? 'bg-zinc-900 text-white dark:bg-white dark:text-zinc-950 shadow-sm'
-                : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
+                ? 'bg-brand text-brand-fg shadow-sm'
+                : 'text-muted hover:text-text'
             }`}
           >
             {tx.tabTravel}
@@ -1132,7 +1129,7 @@ export default function Home() {
           )}
 
           {/* Wardrobe Management Form & Item List */}
-          <div className="space-y-8 pt-4 border-t border-stone-200 dark:border-zinc-800">
+          <div className="space-y-8 pt-4 border-t border-border">
             <WardrobeForm
               tx={tx}
               lang={lang}
