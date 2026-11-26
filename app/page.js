@@ -8,6 +8,15 @@ import {
   searchGeocodingCity,
   isAbortError,
 } from '@/lib/weather';
+import {
+  CLOTHES_BUCKET,
+  SIGNED_URL_TTL_SECONDS,
+  extractClothesStoragePath,
+  generateSafeStoragePath,
+  resolveClothesImageUrl,
+  resolveWardrobeItemUrls,
+  validateImageFile,
+} from '@/lib/storage';
 
 const getSavedOutfitsKey = (userId) => `geyin_saved_${userId}`;
 const getTravelCitiesKey = (userId) => `geyin_travel_cities_${userId}`;
@@ -209,6 +218,9 @@ const UI_TEXT = {
     deleteBtn: 'Sil',
     addNewItemTitle: 'Yeni paltar əlavə et',
     photoLabel: 'Paltar şəkli *',
+    photoRequired: 'Zəhmət olmasa paltar şəkli seçin.',
+    photoInvalidType: 'Yalnız etibarlı şəkil faylları (JPEG, PNG, WebP, GIF) yüklənə bilər.',
+    photoTooLarge: 'Şəkil ölçüsü 5 MB-dan böyük olmamalıdır.',
     chooseFileBtn: 'Fayl seç',
     noFileChosen: 'Fayl seçilmədi',
     previewReady: 'Seçilmiş şəkil hazırdır',
@@ -335,6 +347,9 @@ const UI_TEXT = {
     deleteBtn: 'Delete',
     addNewItemTitle: 'Add new clothing item',
     photoLabel: 'Clothing photo *',
+    photoRequired: 'Please choose a clothing photo.',
+    photoInvalidType: 'Only valid image files (JPEG, PNG, WebP, GIF) are allowed.',
+    photoTooLarge: 'Image size must be 5 MB or less.',
     chooseFileBtn: 'Choose file',
     noFileChosen: 'No file chosen',
     previewReady: 'Selected photo ready',
@@ -460,6 +475,9 @@ const UI_TEXT = {
     deleteBtn: 'Удалить',
     addNewItemTitle: 'Добавить вещь',
     photoLabel: 'Фото вещи *',
+    photoRequired: 'Пожалуйста, выберите фото вещи.',
+    photoInvalidType: 'Допускаются только изображения (JPEG, PNG, WebP, GIF).',
+    photoTooLarge: 'Размер изображения не должен превышать 5 МБ.',
     chooseFileBtn: 'Выберите файл',
     noFileChosen: 'Файл не выбран',
     previewReady: 'Фото выбрано',
@@ -1503,7 +1521,8 @@ export default function HomePage() {
     if (fetchError) {
       setError(fetchError.message);
     } else {
-      setItems(data || []);
+      const resolved = await resolveWardrobeItemUrls(supabase, data || []);
+      setItems(resolved);
     }
     setLoadingItems(false);
   }, []);
@@ -1714,6 +1733,103 @@ export default function HomePage() {
     setOutfitAnimKey((k) => k + 1);
   };
 
+  const itemsById = useMemo(() => new Map(items.map((item) => [item.id, item])), [items]);
+  const [signedSavedUrls, setSignedSavedUrls] = useState({});
+
+  const resolvePieceForDisplay = useCallback(
+    (piece) => {
+      if (!piece) return null;
+      const liveItem = itemsById.get(piece.id);
+      if (liveItem) return liveItem;
+      const path = piece.image_path || extractClothesStoragePath(piece.image_url);
+      const signedUrl = path ? signedSavedUrls[path] : null;
+      return {
+        ...piece,
+        image_path: path || piece.image_path || null,
+        image_url: signedUrl || piece.image_url || '',
+      };
+    },
+    [itemsById, signedSavedUrls]
+  );
+
+  useEffect(() => {
+    if (!user?.id || savedOutfits.length === 0) return;
+    const missingPieces = [];
+    const seenPaths = new Set();
+
+    for (const saved of savedOutfits) {
+      for (const piece of saved.pieces || []) {
+        if (!piece || itemsById.has(piece.id)) continue;
+        const path = piece.image_path || extractClothesStoragePath(piece.image_url);
+        if (path && !signedSavedUrls[path] && !seenPaths.has(path)) {
+          seenPaths.add(path);
+          missingPieces.push({ image_path: path, image_url: piece.image_url || path });
+        }
+      }
+    }
+
+    if (missingPieces.length === 0) return;
+    let cancelled = false;
+    resolveWardrobeItemUrls(supabase, missingPieces).then((resolved) => {
+      if (cancelled) return;
+      setSignedSavedUrls((prev) => {
+        const next = { ...prev };
+        let changed = false;
+        for (const entry of resolved) {
+          if (entry?.image_path && entry?.image_url && next[entry.image_path] !== entry.image_url) {
+            next[entry.image_path] = entry.image_url;
+            changed = true;
+          }
+        }
+        return changed ? next : prev;
+      });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, savedOutfits, itemsById, signedSavedUrls]);
+
+  const handleImageError = useCallback(async (e, itemOrPiece) => {
+    const img = e.currentTarget;
+    if (!img || img.dataset.resigned === '1') return;
+    img.dataset.resigned = '1';
+
+    const pathOrUrl = itemOrPiece?.image_path || itemOrPiece?.image_url;
+    if (!pathOrUrl) return;
+
+    const freshUrl = await resolveClothesImageUrl(supabase, pathOrUrl);
+    if (freshUrl && freshUrl !== img.src) {
+      img.src = freshUrl;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    const refreshMs = Math.max(60_000, (SIGNED_URL_TTL_SECONDS - 300) * 1000);
+    const interval = setInterval(() => {
+      fetchItems(user.id);
+    }, refreshMs);
+    return () => clearInterval(interval);
+  }, [user?.id, fetchItems]);
+
+  const serializePieceForStorage = (piece) => {
+    if (!piece) return null;
+    const imagePath =
+      piece.image_path || extractClothesStoragePath(piece.image_url) || null;
+    return {
+      id: piece.id,
+      category: piece.category,
+      sub_category: piece.sub_category || null,
+      color: piece.color || null,
+      warmth_level: piece.warmth_level,
+      waterproof: Boolean(piece.waterproof),
+      windproof: Boolean(piece.windproof),
+      style: piece.style || 'gundelik',
+      image_path: imagePath,
+    };
+  };
+
   const handleSaveCurrentOutfit = () => {
     if (!user || !recommendedOutfit || !activeWeather) return;
     const pieces = [
@@ -1722,7 +1838,9 @@ export default function HomePage() {
       recommendedOutfit.outerwear,
       recommendedOutfit.shoes,
       recommendedOutfit.accessory,
-    ].filter(Boolean);
+    ]
+      .filter(Boolean)
+      .map(serializePieceForStorage);
 
     if (pieces.length === 0) return;
 
@@ -1733,11 +1851,11 @@ export default function HomePage() {
       temp: activeWeather.temp,
       condition: activeWeather.conditionText,
       outfitData: {
-        top: recommendedOutfit.top,
-        bottom: recommendedOutfit.bottom,
-        outerwear: recommendedOutfit.outerwear,
-        shoes: recommendedOutfit.shoes,
-        accessory: recommendedOutfit.accessory,
+        top: serializePieceForStorage(recommendedOutfit.top),
+        bottom: serializePieceForStorage(recommendedOutfit.bottom),
+        outerwear: serializePieceForStorage(recommendedOutfit.outerwear),
+        shoes: serializePieceForStorage(recommendedOutfit.shoes),
+        accessory: serializePieceForStorage(recommendedOutfit.accessory),
         explanation: displayedOutfitExplanation || recommendedOutfit.explanation || '',
       },
       pieces,
@@ -1755,7 +1873,14 @@ export default function HomePage() {
 
   const handleLoadSavedOutfit = (saved) => {
     if (!saved?.outfitData) return;
-    setRecommendedOutfit(saved.outfitData);
+    setRecommendedOutfit({
+      top: resolvePieceForDisplay(saved.outfitData.top),
+      bottom: resolvePieceForDisplay(saved.outfitData.bottom),
+      outerwear: resolvePieceForDisplay(saved.outfitData.outerwear),
+      shoes: resolvePieceForDisplay(saved.outfitData.shoes),
+      accessory: resolvePieceForDisplay(saved.outfitData.accessory),
+      explanation: saved.outfitData.explanation || '',
+    });
     setOutfitAnimKey((k) => k + 1);
     setMessage(tx.loadedToast);
   };
@@ -1810,37 +1935,40 @@ export default function HomePage() {
     setError('');
     setMessage('');
 
-    if (!imageFile) {
-      setError(tx.photoLabel);
+    const validation = await validateImageFile(imageFile);
+    if (!validation.valid) {
+      if (validation.errorCode === 'missing_file') {
+        setError(tx.photoRequired);
+      } else if (validation.errorCode === 'file_too_large') {
+        setError(tx.photoTooLarge);
+      } else {
+        setError(tx.photoInvalidType);
+      }
       return;
     }
 
     setUploading(true);
     try {
-      const fileExt = imageFile.name.split('.').pop();
-      const fileName = `${user.id}/${Date.now()}.${fileExt}`;
+      const fileName = generateSafeStoragePath(user.id, validation.ext);
 
       const { error: uploadError } = await supabase.storage
-        .from('clothes')
+        .from(CLOTHES_BUCKET)
         .upload(fileName, imageFile, {
           cacheControl: '3600',
+          contentType: validation.mimeType,
           upsert: false,
         });
 
       if (uploadError) throw uploadError;
 
-      const { data: publicUrlData } = supabase.storage
-        .from('clothes')
-        .getPublicUrl(fileName);
-
-      const imageUrl = publicUrlData?.publicUrl;
       const normalizedCategory =
         typeof category === 'string' ? category : category?.value || CATEGORIES[0].value;
 
       const { error: insertError } = await supabase.from('wardrobe_items').insert([
         {
           user_id: user.id,
-          image_url: imageUrl,
+          image_url: fileName,
+          image_path: fileName,
           category: normalizedCategory,
           sub_category: subCategory.trim() || null,
           color: color.trim() || null,
@@ -1851,7 +1979,10 @@ export default function HomePage() {
         },
       ]);
 
-      if (insertError) throw insertError;
+      if (insertError) {
+        await supabase.storage.from(CLOTHES_BUCKET).remove([fileName]);
+        throw insertError;
+      }
 
       setMessage(tx.addedToast);
       setImageFile(null);
@@ -1877,12 +2008,6 @@ export default function HomePage() {
     if (!user) return;
     setError('');
     try {
-      const urlParts = item.image_url.split('/clothes/');
-      if (urlParts.length > 1) {
-        const storagePath = urlParts[1].split('?')[0];
-        await supabase.storage.from('clothes').remove([storagePath]);
-      }
-
       const { error: deleteError } = await supabase
         .from('wardrobe_items')
         .delete()
@@ -1890,6 +2015,11 @@ export default function HomePage() {
         .eq('user_id', user.id);
 
       if (deleteError) throw deleteError;
+
+      const storagePath = item.image_path || extractClothesStoragePath(item.image_url);
+      if (storagePath) {
+        await supabase.storage.from(CLOTHES_BUCKET).remove([storagePath]);
+      }
 
       setItems((prev) => prev.filter((i) => i.id !== item.id));
     } catch (err) {
@@ -2357,6 +2487,7 @@ export default function HomePage() {
                         <img
                           src={piece.image_url}
                           alt={piece.sub_category || getCategoryLabel(piece.category)}
+                          onError={(e) => handleImageError(e, piece)}
                           className="w-full h-32 object-cover"
                         />
                         <div className="p-2.5 space-y-1">
@@ -2609,6 +2740,7 @@ export default function HomePage() {
                               <img
                                 src={slot.item.image_url}
                                 alt={slot.item.sub_category || slot.label}
+                                onError={(e) => handleImageError(e, slot.item)}
                                 className="w-full h-36 object-cover"
                               />
                               <div className="p-2.5 space-y-1">
@@ -2710,14 +2842,18 @@ export default function HomePage() {
                     </div>
                   </div>
                   <div className="flex gap-2 overflow-x-auto pb-1">
-                    {saved.pieces.map((p, idx) => (
-                      <img
-                        key={`${saved.id}-${idx}`}
-                        src={p.image_url}
-                        alt={p.sub_category || getCategoryLabel(p.category)}
-                        className={`w-16 h-20 rounded-lg object-cover border ${t.border} shrink-0`}
-                      />
-                    ))}
+                    {saved.pieces.map((p, idx) => {
+                      const resolvedPiece = resolvePieceForDisplay(p) || p;
+                      return (
+                        <img
+                          key={`${saved.id}-${idx}`}
+                          src={resolvedPiece.image_url || undefined}
+                          alt={resolvedPiece.sub_category || getCategoryLabel(resolvedPiece.category)}
+                          onError={(e) => handleImageError(e, resolvedPiece)}
+                          className={`w-16 h-20 rounded-lg object-cover border ${t.border} shrink-0`}
+                        />
+                      );
+                    })}
                   </div>
                 </div>
               ))}
@@ -2734,8 +2870,7 @@ export default function HomePage() {
               <input
                 id="clothes-file-input"
                 type="file"
-                accept="image/*"
-                required
+                accept="image/jpeg,image/png,image/webp,image/gif"
                 onChange={(e) => setImageFile(e.target.files?.[0] || null)}
                 className="hidden"
               />
@@ -2912,6 +3047,7 @@ export default function HomePage() {
                     <img
                       src={item.image_url}
                       alt={item.sub_category || getCategoryLabel(item.category)}
+                      onError={(e) => handleImageError(e, item)}
                       className="w-full h-44 object-cover"
                     />
                     <div className="p-3.5 space-y-1.5">
