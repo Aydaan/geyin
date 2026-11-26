@@ -9,6 +9,10 @@ import {
   isAbortError,
 } from '@/lib/weather';
 
+const getSavedOutfitsKey = (userId) => `geyin_saved_${userId}`;
+const getTravelCitiesKey = (userId) => `geyin_travel_cities_${userId}`;
+const getManualLocationKey = (userId) => `geyin_manual_location_${userId}`;
+
 const CATEGORIES = [
   {
     value: 'Üst geyim',
@@ -945,6 +949,11 @@ export default function HomePage() {
     txRef.current = tx;
   }, [tx]);
 
+  const userIdRef = useRef(null);
+  useEffect(() => {
+    userIdRef.current = user?.id ?? null;
+  }, [user]);
+
   const weatherAbortRef = useRef(null);
   const weeklyAbortRef = useRef(null);
   const geoSearchAbortRef = useRef(null);
@@ -969,14 +978,6 @@ export default function HomePage() {
       const savedLang = localStorage.getItem('geyin_lang');
       if (savedLang === 'az' || savedLang === 'en' || savedLang === 'ru') {
         setLang(savedLang);
-      }
-      const savedTravelList = localStorage.getItem('geyin_travel_cities');
-      if (savedTravelList) {
-        const parsed = JSON.parse(savedTravelList);
-        setTravelCities(parsed);
-        if (parsed.length > 0) {
-          setActiveTravelPlan(parsed[0]);
-        }
       }
     } catch {
       // ignore
@@ -1241,9 +1242,11 @@ export default function HomePage() {
 
   const persistManualLocation = useCallback((cityValue, lat, lon, label, mode = 'manual') => {
     setLocationMode(mode);
+    const uid = userIdRef.current;
+    if (!uid) return;
     try {
       localStorage.setItem(
-        'geyin_manual_location',
+        getManualLocationKey(uid),
         JSON.stringify({ city: cityValue, lat, lon, label, mode })
       );
     } catch {
@@ -1254,10 +1257,13 @@ export default function HomePage() {
   const detectGpsLocation = useCallback(() => {
     setDemoPresetId('live');
     setLocationMode('gps');
-    try {
-      localStorage.removeItem('geyin_manual_location');
-    } catch {
-      // ignore
+    const uid = userIdRef.current;
+    if (uid) {
+      try {
+        localStorage.removeItem(getManualLocationKey(uid));
+      } catch {
+        // ignore
+      }
     }
 
     if (typeof window === 'undefined' || !navigator.geolocation) {
@@ -1382,10 +1388,12 @@ export default function HomePage() {
       const nextList = [entry, ...travelCities.filter((c) => c.label !== label)].slice(0, 10);
       setTravelCities(nextList);
       setActiveTravelPlan(entry);
-      try {
-        localStorage.setItem('geyin_travel_cities', JSON.stringify(nextList));
-      } catch {
-        // ignore
+      if (user?.id) {
+        try {
+          localStorage.setItem(getTravelCitiesKey(user.id), JSON.stringify(nextList));
+        } catch {
+          // ignore
+        }
       }
 
       setDemoPresetId('live');
@@ -1421,11 +1429,16 @@ export default function HomePage() {
     setTravelCities(nextList);
     if (activeTravelPlan?.id === id) {
       setActiveTravelPlan(nextList[0] || null);
+      if (!nextList[0]) {
+        setWeeklyForecast([]);
+      }
     }
-    try {
-      localStorage.setItem('geyin_travel_cities', JSON.stringify(nextList));
-    } catch {
-      // ignore
+    if (user?.id) {
+      try {
+        localStorage.setItem(getTravelCitiesKey(user.id), JSON.stringify(nextList));
+      } catch {
+        // ignore
+      }
     }
   };
 
@@ -1445,31 +1458,97 @@ export default function HomePage() {
     setLoadingItems(false);
   }, []);
 
-  const initLocationOnLogin = useCallback(() => {
-    let savedManual = null;
+  const migrateLegacyStorageKey = useCallback((legacyKey, scopedKey) => {
     try {
-      const raw = localStorage.getItem('geyin_manual_location');
-      if (raw) savedManual = JSON.parse(raw);
+      const legacyValue = localStorage.getItem(legacyKey);
+      if (legacyValue !== null) {
+        if (localStorage.getItem(scopedKey) === null) {
+          localStorage.setItem(scopedKey, legacyValue);
+        }
+        localStorage.removeItem(legacyKey);
+      }
     } catch {
       // ignore
     }
+  }, []);
 
-    if (savedManual && typeof savedManual.lat === 'number' && typeof savedManual.lon === 'number') {
-      const mode = savedManual.mode || 'manual';
-      setLocationMode(mode);
-      syncLocationControl(savedManual.city, savedManual.lat, savedManual.lon, savedManual.label || savedManual.city);
-      setLocationSource(
-        mode === 'search'
-          ? tx.citySearched
-          : mode === 'travel'
-          ? `${tx.travelPinned}: ${savedManual.label || savedManual.city}`
-          : tx.citySelected
-      );
-      fetchWeatherByCoords(savedManual.lat, savedManual.lon, savedManual.label || savedManual.city);
-    } else {
-      detectGpsLocation();
-    }
-  }, [detectGpsLocation, fetchWeatherByCoords, syncLocationControl, tx.citySearched, tx.citySelected, tx.travelPinned]);
+  const loadUserScopedState = useCallback(
+    (userId) => {
+      if (!userId) return;
+      migrateLegacyStorageKey('geyin_travel_cities', getTravelCitiesKey(userId));
+      migrateLegacyStorageKey('geyin_manual_location', getManualLocationKey(userId));
+      try {
+        const rawSaved = localStorage.getItem(getSavedOutfitsKey(userId));
+        const parsedSaved = rawSaved ? JSON.parse(rawSaved) : [];
+        setSavedOutfits(Array.isArray(parsedSaved) ? parsedSaved : []);
+      } catch {
+        setSavedOutfits([]);
+      }
+      try {
+        const rawTravel = localStorage.getItem(getTravelCitiesKey(userId));
+        const parsedTravel = rawTravel ? JSON.parse(rawTravel) : [];
+        if (Array.isArray(parsedTravel) && parsedTravel.length > 0) {
+          setTravelCities(parsedTravel);
+          setActiveTravelPlan(parsedTravel[0]);
+        } else {
+          setTravelCities([]);
+          setActiveTravelPlan(null);
+          setWeeklyForecast([]);
+        }
+      } catch {
+        setTravelCities([]);
+        setActiveTravelPlan(null);
+        setWeeklyForecast([]);
+      }
+    },
+    [migrateLegacyStorageKey]
+  );
+
+  const resetUserScopedState = useCallback(() => {
+    setItems([]);
+    setSavedOutfits([]);
+    setRecommendedOutfit(null);
+    setLockedSlots({});
+    setTravelCities([]);
+    setActiveTravelPlan(null);
+    setWeeklyForecast([]);
+    setOutfitStyleFilter('all');
+    setSelectedCategoryFilter('Hamısı');
+    setDemoPresetId('live');
+    setTravelCityInput('');
+    setTravelNoteInput('');
+  }, []);
+
+  const initLocationOnLogin = useCallback(
+    (userId) => {
+      let savedManual = null;
+      if (userId) {
+        try {
+          const raw = localStorage.getItem(getManualLocationKey(userId));
+          if (raw) savedManual = JSON.parse(raw);
+        } catch {
+          // ignore
+        }
+      }
+
+      if (savedManual && typeof savedManual.lat === 'number' && typeof savedManual.lon === 'number') {
+        const mode = savedManual.mode || 'manual';
+        setLocationMode(mode);
+        syncLocationControl(savedManual.city, savedManual.lat, savedManual.lon, savedManual.label || savedManual.city);
+        setLocationSource(
+          mode === 'search'
+            ? tx.citySearched
+            : mode === 'travel'
+            ? `${tx.travelPinned}: ${savedManual.label || savedManual.city}`
+            : tx.citySelected
+        );
+        fetchWeatherByCoords(savedManual.lat, savedManual.lon, savedManual.label || savedManual.city);
+      } else {
+        detectGpsLocation();
+      }
+    },
+    [detectGpsLocation, fetchWeatherByCoords, syncLocationControl, tx.citySearched, tx.citySelected, tx.travelPinned]
+  );
 
   const initLocationOnLoginRef = useRef(initLocationOnLogin);
   useEffect(() => {
@@ -1497,20 +1576,17 @@ export default function HomePage() {
       setLoading(false);
 
       if (currentUser) {
+        userIdRef.current = currentUser.id;
         if (loadedUserId !== currentUser.id) {
           loadedUserId = currentUser.id;
+          loadUserScopedState(currentUser.id);
           fetchItems(currentUser.id);
-          initLocationOnLoginRef.current();
-          try {
-            const raw = localStorage.getItem(`geyin_saved_${currentUser.id}`);
-            if (raw) setSavedOutfits(JSON.parse(raw));
-          } catch {
-            // ignore
-          }
+          initLocationOnLoginRef.current(currentUser.id);
         }
       } else {
+        userIdRef.current = null;
         loadedUserId = null;
-        setItems([]);
+        resetUserScopedState();
       }
     });
 
@@ -1518,7 +1594,7 @@ export default function HomePage() {
       active = false;
       authListener.subscription.unsubscribe();
     };
-  }, [fetchItems]);
+  }, [fetchItems, loadUserScopedState, resetUserScopedState]);
 
   useEffect(() => {
     if (outfitWeatherCore && items.length > 0) {
@@ -1620,7 +1696,7 @@ export default function HomePage() {
     const updatedList = [newSaved, ...savedOutfits].slice(0, 12);
     setSavedOutfits(updatedList);
     try {
-      localStorage.setItem(`geyin_saved_${user.id}`, JSON.stringify(updatedList));
+      localStorage.setItem(getSavedOutfitsKey(user.id), JSON.stringify(updatedList));
     } catch {
       // ignore
     }
@@ -1639,7 +1715,7 @@ export default function HomePage() {
     const updatedList = savedOutfits.filter((o) => o.id !== savedId);
     setSavedOutfits(updatedList);
     try {
-      localStorage.setItem(`geyin_saved_${user.id}`, JSON.stringify(updatedList));
+      localStorage.setItem(getSavedOutfitsKey(user.id), JSON.stringify(updatedList));
     } catch {
       // ignore
     }
@@ -1672,6 +1748,8 @@ export default function HomePage() {
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
+    userIdRef.current = null;
+    resetUserScopedState();
     setMessage('');
     setError('');
   };
