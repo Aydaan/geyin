@@ -1078,7 +1078,7 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-bg text-text transition-colors duration-200">
+    <div className="min-h-screen text-text transition-colors duration-200">
       <div className="mx-auto max-w-6xl px-4 sm:px-6 py-8 space-y-8">
         {/* Header with App Title, Language/Theme Toggles, and Logout */}
         <header className="flex flex-wrap items-center justify-between gap-4 pb-5 border-b-2 border-border">
