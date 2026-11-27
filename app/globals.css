@@ -82,14 +82,14 @@ html[data-theme="dark"] {
   background:
     radial-gradient(ellipse at 18% 18%, rgb(212 222 211 / 40%), transparent 34%),
     radial-gradient(ellipse at 82% 84%, rgb(231 221 202 / 38%), transparent 32%),
-    var(--bg);
+    transparent;
 }
 
 html[data-theme="dark"] .auth-shell {
   background:
     radial-gradient(ellipse at 18% 18%, rgb(58 82 68 / 24%), transparent 36%),
     radial-gradient(ellipse at 82% 84%, rgb(104 82 54 / 16%), transparent 34%),
-    var(--bg);
+    transparent;
 }
 
 .auth-card {
@@ -101,7 +101,9 @@ html[data-theme="dark"] .auth-shell {
 .app-panel {
   border-color: var(--border);
   border-radius: 1.35rem;
-  background: var(--surface);
+  background: color-mix(in srgb, var(--surface) 78%, transparent);
+  -webkit-backdrop-filter: blur(14px) saturate(1.1);
+  backdrop-filter: blur(14px) saturate(1.1);
   box-shadow: var(--shadow-panel);
 }
 
@@ -135,4 +137,77 @@ html[data-theme="dark"] .auth-shell {
 
 .animate-outfit-in {
   animation: fadeSlideUp 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* ---------- Background decoration (pure CSS) ---------- */
+body {
+  position: relative;
+  isolation: isolate;
+}
+
+/* Layer 1: soft colour blobs + faint dot grid */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 12% 14%, rgb(168 199 170 / 45%) 0, transparent 22rem),
+    radial-gradient(circle at 88% 22%, rgb(240 214 170 / 40%) 0, transparent 20rem),
+    radial-gradient(circle at 78% 92%, rgb(176 205 214 / 38%) 0, transparent 24rem),
+    radial-gradient(circle at 8% 88%, rgb(214 190 205 / 30%) 0, transparent 18rem),
+    radial-gradient(rgb(38 83 65 / 16%) 1.2px, transparent 1.4px) 0 0 / 26px 26px;
+  animation: bgDrift 28s ease-in-out infinite alternate;
+}
+
+/* Layer 2: floating geometric shapes */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(circle, transparent 0 56%, rgb(38 83 65 / 18%) 57% 60%, transparent 61%) 6% 62% / 15rem 15rem no-repeat,
+    radial-gradient(circle, rgb(231 190 120 / 24%) 0 100%, transparent 100%) 94% 8% / 7rem 7rem no-repeat,
+    radial-gradient(circle, transparent 0 56%, rgb(176 140 90 / 20%) 57% 60%, transparent 61%) 92% 74% / 11rem 11rem no-repeat,
+    linear-gradient(135deg, rgb(38 83 65 / 13%), transparent 70%) 3% 6% / 8rem 8rem no-repeat;
+  animation: bgFloat 22s ease-in-out infinite alternate;
+}
+
+html[data-theme="dark"] body::before {
+  background:
+    radial-gradient(circle at 12% 14%, rgb(70 110 84 / 30%) 0, transparent 22rem),
+    radial-gradient(circle at 88% 22%, rgb(120 92 52 / 22%) 0, transparent 20rem),
+    radial-gradient(circle at 78% 92%, rgb(52 92 108 / 26%) 0, transparent 24rem),
+    radial-gradient(circle at 8% 88%, rgb(100 64 88 / 20%) 0, transparent 18rem),
+    radial-gradient(rgb(167 195 173 / 10%) 1.2px, transparent 1.4px) 0 0 / 26px 26px;
+}
+
+html[data-theme="dark"] body::after {
+  background:
+    radial-gradient(circle, transparent 0 56%, rgb(167 195 173 / 16%) 57% 60%, transparent 61%) 6% 62% / 15rem 15rem no-repeat,
+    radial-gradient(circle, rgb(200 160 90 / 14%) 0 100%, transparent 100%) 94% 8% / 7rem 7rem no-repeat,
+    radial-gradient(circle, transparent 0 56%, rgb(200 160 90 / 14%) 57% 60%, transparent 61%) 92% 74% / 11rem 11rem no-repeat,
+    linear-gradient(135deg, rgb(167 195 173 / 10%), transparent 70%) 3% 6% / 8rem 8rem no-repeat;
+}
+
+.auth-card {
+  -webkit-backdrop-filter: blur(14px) saturate(1.1);
+  backdrop-filter: blur(14px) saturate(1.1);
+}
+
+@keyframes bgDrift {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to   { transform: translate3d(-1.5%, 1.5%, 0) scale(1.04); }
+}
+
+@keyframes bgFloat {
+  from { transform: translate3d(0, 0, 0) rotate(0deg); }
+  to   { transform: translate3d(1.2%, -1.8%, 0) rotate(3deg); }
+}
+
+@media (max-width: 640px) {
+  body::after { opacity: 0.6; }
 }
